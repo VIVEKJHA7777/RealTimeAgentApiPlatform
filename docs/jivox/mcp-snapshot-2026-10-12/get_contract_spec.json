@@ -1,0 +1,409 @@
+{
+  "spec_version": "1.0",
+  "contract_format": "contract/1",
+  "how_to_author": [
+    "Read get_canonical_schema: the id column, this agent's bound fields (outputs only), and every other column with its type and tier.",
+    "Write the contract document in its final form from the API's documentation, following the template and the samples.",
+    "Call submit_contract with the document. On invalid or gate_failed, apply the fix each error carries and submit again. On failed, read the evidence, adjust the document, and submit again.",
+    "When the response says verified, call activate_contract with that version."
+  ],
+  "template": {
+    "contract_format": "contract/1",
+    "feed_type": "product | review | store | content  (the agent's feed type)",
+    "base_url": "https://host[/prefix]  (no placeholders)",
+    "credential": "service | user  (service: the standing token registered in Studio; user: the signed-in person's token from the auth broker)",
+    "service_header": "with service: the header that carries the standing token",
+    "service_value_format": "with service: the header value with {token} where the token goes, exactly as the API wants it, e.g. \"Bearer {token}\" or \"{token}\"",
+    "user_header": "with user: the header that carries the signed-in person's token",
+    "user_value_format": "with user: the header value with {token} where that token goes",
+    "request": {
+      "method": "GET | POST",
+      "path": "/some/path  (no placeholders)",
+      "query": "GET only: the query parameters",
+      "body": "POST only: the JSON body, any nesting",
+      "_values": [
+        "\"{<id column>}\"  GET only: the id list as one comma-separated value. REQUIRED, exactly once.",
+        "[ { \"k\": \"{<id column>}\", \"c\": \"{<ingested column>}\" } ]  POST only: one object per row, always a list of objects even for one id. REQUIRED, exactly once. An ingested column placeholder may sit only here.",
+        "\"{_meta.openai/locale}\"  chat context, sent whole; key dropped when the host has none.",
+        "\"USD\" / true / 3  literal, copied as written, never validated."
+      ]
+    },
+    "response": {
+      "_note": "dictated: every API answers in this envelope",
+      "status": "success | failure",
+      "generated_at": "<ISO-8601 timestamp>",
+      "data": [
+        {
+          "<key>": "<flat value>  (one flat object per answered id)"
+        }
+      ],
+      "errors": [
+        {
+          "error_id": "<id>",
+          "error_code": "<code>",
+          "error_message": "<text>"
+        }
+      ]
+    },
+    "fields": [
+      {
+        "_note": "first entry REQUIRED: the feed type's id column (the echo); then only fields bound to this agent, at least one of them",
+        "column_name": "<schema column>",
+        "at": "$.data[*].<key>  (where the value sits in each data item)",
+        "type": "string | int | float | boolean | image  (filled from the schema if omitted)",
+        "default_value": "used when an item lacks the key; empty = no value for that row"
+      }
+    ],
+    "call_rules": {
+      "max_ids_per_call": "1..100, the author may lower it (default 100)",
+      "timeout_ms": 3000,
+      "retries": 0,
+      "response_must_be_no_store": true
+    },
+    "sample_request": "the concrete query (GET) or body (POST) with real ids; sent as-is, once, to verify",
+    "test_user_token": "with user only: a dummy token that belongs to no one, sent per user_header / user_value_format for the one verification call; never stored"
+  },
+  "response_envelope": {
+    "status": "success",
+    "generated_at": "2026-09-11T10:00:00Z",
+    "data": [
+      {
+        "sku": "SKU-1001",
+        "amount": 79.99,
+        "currency": "USD"
+      },
+      {
+        "sku": "SKU-2049",
+        "amount": 129,
+        "currency": "USD"
+      }
+    ],
+    "errors": [
+      {
+        "error_id": "SKU-9999",
+        "error_code": "NOT_FOUND",
+        "error_message": "unknown sku"
+      }
+    ]
+  },
+  "response_rules": [
+    "status success: the items in data apply. Ids listed in errors got no answer and their rows show no live value.",
+    "status failure: the whole call failed. Nothing is applied. errors says why.",
+    "The response must carry Cache-Control: no-store.",
+    "Every item carries the id it answers for. There is no one-value-for-all-rows form.",
+    "Items are flat: one level of keys, scalar values. Extra keys are ignored."
+  ],
+  "rules": [
+    "The id placeholder is {<id column>} and appears exactly once in every request; every data item echoes the id. It is written the way the wire looks: on GET the query value itself, which becomes the batch's ids joined by commas; on POST inside the one object of a one-element list, which becomes one object per row. A bare placeholder or a plain list of ids on POST is refused.",
+    "An ingested column placeholder ({category}) may sit only inside that per-row object next to the id. POST only. A field bound to any realtime agent is never an input. The composition this agent belongs to must map the column. Its screen 2 (Schema Mapping) checks that before publish. After publish, a version with an unmapped input cannot be activated.",
+    "fields lists the id column first, then only fields bound to this agent: at least one of them, at most all of them. Fields bound to another agent, unbound fields and mandatory-tier fields are refused.",
+    "{_meta.*} is one value per call, inserted whole wherever it sits, also inside per-row objects. The key is dropped when the host sends none. Never sent at verification. Allowed keys: _meta.openai/locale, _meta.openai/userLocation.",
+    "Literal values are copied exactly, any JSON type, never validated.",
+    "One batch is one call. A batch larger than max_ids_per_call is split into consecutive calls of that size. Nothing else fans out.",
+    "credential names whose token every call carries; it must equal the agent's registered credential. For that kind the document says exactly how the token is sent: <kind>_header and <kind>_value_format with {token} exactly once. The platform adds nothing of its own. No token ever appears in the document: the standing token is read from the parameter store, the user's token comes from the auth broker per call.",
+    "Verification sends sample_request unchanged and reads the sent ids from it by matching the request template. It checks HTTP 2xx, Cache-Control: no-store, status success, every sent id appearing exactly once at the id field's path, and every field resolving to a value of its type or falling back to its default. A service contract verifies with the standing token; a user contract verifies with test_user_token, a dummy token that is used once and discarded.",
+    "Stored: the document as submitted minus test_user_token; type filled from the schema when omitted."
+  ],
+  "not_supported": "Contracts without an id (one value for all rows, e.g. an account balance), nested values inside data items, composite keys, map-shaped responses, single-id endpoints, paginated responses. Such an API needs an adapter that presents this shape.",
+  "lifecycle": [
+    "Every submit_contract call creates a new contract. A document that passes validation, the gates and the live check is stored as a new numbered version with status verified. A document that fails any of them is stored as failed with no version; the errors or the evidence come back in the response. Fix the document and submit again.",
+    "list_contracts lists the verified versions and names the active one.",
+    "activate_contract(version) re-runs the gates and the live check for that version, then makes it active; the previously active version becomes retired. Only a verified version can be activated. On a published composition, a version whose {column} inputs the composition does not map is refused: that needs a new realtime agent.",
+    "failed and retired are final. To go back to an older document, submit it again."
+  ],
+  "examples": [
+    {
+      "shows": "GET, comma-separated ids, bearer token in Authorization",
+      "contract": {
+        "contract_format": "contract/1",
+        "feed_type": "product",
+        "base_url": "https://api.example-brand.example",
+        "credential": "service",
+        "service_header": "Authorization",
+        "service_value_format": "Bearer {token}",
+        "request": {
+          "method": "GET",
+          "path": "/live/prices",
+          "query": {
+            "ids": "{item_id}",
+            "locale": "{_meta.openai/locale}",
+            "market": "US"
+          }
+        },
+        "response": {
+          "status": "success",
+          "generated_at": "2026-09-11T10:00:00Z",
+          "data": [
+            {
+              "id": "SKU-1001",
+              "price": 79.99,
+              "currency": "USD"
+            }
+          ],
+          "errors": []
+        },
+        "fields": [
+          {
+            "column_name": "item_id",
+            "at": "$.data[*].id",
+            "type": "string",
+            "default_value": ""
+          },
+          {
+            "column_name": "current_price",
+            "at": "$.data[*].price",
+            "type": "float",
+            "default_value": ""
+          }
+        ],
+        "call_rules": {
+          "max_ids_per_call": 100,
+          "timeout_ms": 3000,
+          "retries": 0,
+          "response_must_be_no_store": true
+        },
+        "sample_request": {
+          "ids": "SKU-1001,SKU-2049",
+          "market": "US"
+        }
+      },
+      "stored_as": {
+        "contract_format": "contract/1",
+        "feed_type": "product",
+        "base_url": "https://api.example-brand.example",
+        "credential": "service",
+        "service_header": "Authorization",
+        "service_value_format": "Bearer {token}",
+        "request": {
+          "method": "GET",
+          "path": "/live/prices",
+          "query": {
+            "ids": "{item_id}",
+            "locale": "{_meta.openai/locale}",
+            "market": "US"
+          }
+        },
+        "response": {
+          "status": "success",
+          "generated_at": "2026-09-11T10:00:00Z",
+          "data": [
+            {
+              "id": "SKU-1001",
+              "price": 79.99,
+              "currency": "USD"
+            }
+          ],
+          "errors": []
+        },
+        "fields": [
+          {
+            "column_name": "item_id",
+            "at": "$.data[*].id",
+            "type": "string",
+            "default_value": ""
+          },
+          {
+            "column_name": "current_price",
+            "at": "$.data[*].price",
+            "type": "float",
+            "default_value": ""
+          }
+        ],
+        "call_rules": {
+          "max_ids_per_call": 100,
+          "timeout_ms": 3000,
+          "retries": 0,
+          "response_must_be_no_store": true
+        },
+        "sample_request": {
+          "ids": "SKU-1001,SKU-2049",
+          "market": "US"
+        }
+      }
+    },
+    {
+      "shows": "POST, one object per row with an input column, raw API key in X-Api-Key",
+      "contract": {
+        "contract_format": "contract/1",
+        "feed_type": "product",
+        "base_url": "https://api.acme-shoes.example",
+        "credential": "service",
+        "service_header": "X-Api-Key",
+        "service_value_format": "{token}",
+        "request": {
+          "method": "POST",
+          "path": "/v2/pricing/batch",
+          "body": {
+            "items": [
+              {
+                "sku": "{item_id}",
+                "cat": "{category}"
+              }
+            ],
+            "context": {
+              "locale": "{_meta.openai/locale}",
+              "location": "{_meta.openai/userLocation}"
+            },
+            "currency": "USD",
+            "include_promotions": true
+          }
+        },
+        "response": {
+          "status": "success",
+          "generated_at": "2026-09-11T10:00:00Z",
+          "data": [
+            {
+              "sku": "SKU-1001",
+              "amount": 79.99,
+              "list_price": 89.99,
+              "currency": "USD",
+              "promo": null
+            }
+          ],
+          "errors": [
+            {
+              "error_id": "SKU-9999",
+              "error_code": "NOT_FOUND",
+              "error_message": "unknown sku"
+            }
+          ]
+        },
+        "fields": [
+          {
+            "column_name": "item_id",
+            "at": "$.data[*].sku",
+            "type": "string",
+            "default_value": ""
+          },
+          {
+            "column_name": "current_price",
+            "at": "$.data[*].amount",
+            "type": "float",
+            "default_value": ""
+          },
+          {
+            "column_name": "custom_badge_2_value",
+            "at": "$.data[*].list_price",
+            "type": "string",
+            "default_value": "n/a"
+          }
+        ],
+        "call_rules": {
+          "max_ids_per_call": 50,
+          "timeout_ms": 3000,
+          "retries": 0,
+          "response_must_be_no_store": true
+        },
+        "sample_request": {
+          "items": [
+            {
+              "sku": "SKU-1001",
+              "cat": "shoes"
+            },
+            {
+              "sku": "SKU-3311",
+              "cat": "apparel"
+            }
+          ],
+          "currency": "USD",
+          "include_promotions": true
+        }
+      },
+      "stored_as": {
+        "contract_format": "contract/1",
+        "feed_type": "product",
+        "base_url": "https://api.acme-shoes.example",
+        "credential": "service",
+        "service_header": "X-Api-Key",
+        "service_value_format": "{token}",
+        "request": {
+          "method": "POST",
+          "path": "/v2/pricing/batch",
+          "body": {
+            "items": [
+              {
+                "sku": "{item_id}",
+                "cat": "{category}"
+              }
+            ],
+            "context": {
+              "locale": "{_meta.openai/locale}",
+              "location": "{_meta.openai/userLocation}"
+            },
+            "currency": "USD",
+            "include_promotions": true
+          }
+        },
+        "response": {
+          "status": "success",
+          "generated_at": "2026-09-11T10:00:00Z",
+          "data": [
+            {
+              "sku": "SKU-1001",
+              "amount": 79.99,
+              "list_price": 89.99,
+              "currency": "USD",
+              "promo": null
+            }
+          ],
+          "errors": [
+            {
+              "error_id": "SKU-9999",
+              "error_code": "NOT_FOUND",
+              "error_message": "unknown sku"
+            }
+          ]
+        },
+        "fields": [
+          {
+            "column_name": "item_id",
+            "at": "$.data[*].sku",
+            "type": "string",
+            "default_value": ""
+          },
+          {
+            "column_name": "current_price",
+            "at": "$.data[*].amount",
+            "type": "float",
+            "default_value": ""
+          },
+          {
+            "column_name": "custom_badge_2_value",
+            "at": "$.data[*].list_price",
+            "type": "string",
+            "default_value": "n/a"
+          }
+        ],
+        "call_rules": {
+          "max_ids_per_call": 50,
+          "timeout_ms": 3000,
+          "retries": 0,
+          "response_must_be_no_store": true
+        },
+        "sample_request": {
+          "items": [
+            {
+              "sku": "SKU-1001",
+              "cat": "shoes"
+            },
+            {
+              "sku": "SKU-3311",
+              "cat": "apparel"
+            }
+          ],
+          "currency": "USD",
+          "include_promotions": true
+        }
+      }
+    }
+  ],
+  "your_agent": {
+    "feed_type": "product",
+    "id_column": "item_id",
+    "bound_fields": [
+      "sub_title"
+    ],
+    "credential": "service",
+    "service_token_registered": true
+  }
+}

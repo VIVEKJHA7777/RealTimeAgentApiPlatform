@@ -1,0 +1,44 @@
+column_name,tier,description,example_format
+brand_name,optional,Map the brand or manufacturer name from source. This is separate from the product name.,Brand Whiskey
+category,optional,Map the top-level product category as defined in the source. Used for broad grouping and filtering.,Whiskey
+currency,optional,Map the currency code from source in ISO 4217 format. Use the currency as listed in the source for the region the product is sold in.,USD
+current_price,optional,Map the current selling price from source — the price the customer would pay retrieved from the site at the time of extraction.,34.99
+custom_badge_1_label,optional,"Map the label text of a custom badge, used to display descriptive tag on the product card.",Volume
+custom_badge_1_value,optional,"Map the value corresponding to the label of the custom badge, used to display descriptive tag on the product card.",330 ml
+custom_badge_2_label,optional,"Map the label text of a custom badge, used to display descriptive tag on the product card.",Volume
+custom_badge_2_value,optional,"Map the value corresponding to the label of the custom badge, used to display descriptive tag on the product card.",330 ml
+custom_badge_3_label,optional,"Map the label text of a custom badge, used to display descriptive tag on the product card.",Volume
+custom_badge_3_value,optional,"Map the value corresponding to the label of the custom badge, used to display descriptive tag on the product card.",330 ml
+description,optional,Map the short product summary from source (typically 1–2 sentences). Used in listings and cards where space is limited.,A smooth and refined spirit crafted from select ingredients. Perfect for sipping neat or in cocktails. (~20 words)
+discount_percentage,optional,"Map the discount percentage from source, representing the percentage off the original_price.",16.7
+gallery_image_1,optional,Map the image URL for the 1st gallery image.,https://cdn.example.com/products/product-gallery-1.jpg
+gallery_image_2,optional,Map the image URL for the 2nd gallery image.,https://cdn.example.com/products/product-gallery-2.jpg
+gallery_image_3,optional,Map the image URL for the 3rd gallery image.,https://cdn.example.com/products/product-gallery-3.jpg
+gallery_image_4,optional,Map the image URL for the 4th gallery image.,https://cdn.example.com/products/product-gallery-4.jpg
+gallery_image_5,optional,Map the image URL for the 5th gallery image.,https://cdn.example.com/products/product-gallery-5.jpg
+is_active,optional,Map the product availability status from source. Indicates whether the product is currently available for display and purchase.,true
+is_featured,optional,Map the featured/promoted flag from source. Indicates whether the product is marked for highlighting in curated sections.,false
+item_id,mandatory,Map the unique product identifier as it appears in the source system.,PRD-001
+product_image,mandatory,Map the primary product image URL from source — the standard pack shot or product-on-white image. This is the default image shown in listings and search results. Different from hero_image (lifestyle/banner) and thumbnail_image (small preview).,https://cdn.example.com/products/product-front.png
+product_name,mandatory,Map the full display title from source — the complete product heading as shown to customers.,Brand Name Product Name Variant Descriptor
+product_url,optional,Map the canonical URL to the product's detail page from the source.,https://www.example.com/products/product-slug
+purchase_link_1_purchase_link,expected,Map the direct purchase URL from the 1st retailer.,https://www.retailer-a.com/product/product-slug
+purchase_link_1_retailer_logo_url,optional,Map the logo image URL for the 1st retailer from source.,https://cdn.example.com/retailers/retailer-a-logo.png
+purchase_link_1_retailer_name,expected,Map the name of the 1st retailer from source where this product can be purchased.,Retailer A
+purchase_link_2_purchase_link,optional,Map the direct purchase URL from the 2nd retailer.,https://www.retailer-b.com/buy/sku-id
+purchase_link_2_retailer_logo_url,optional,Map the logo image URL for the 2nd retailer from source.,https://cdn.example.com/retailers/retailer-b-logo.png
+purchase_link_2_retailer_name,optional,Map the name of the 2nd retailer from source where this product can be purchased.,Retailer B
+purchase_link_3_purchase_link,optional,Map the direct purchase URL from the 3rd retailer.,https://www.retailer-c.com/p/product-slug
+purchase_link_3_retailer_logo_url,optional,Map the logo image URL for the 3rd retailer from source.,https://cdn.example.com/retailers/retailer-c-logo.png
+purchase_link_3_retailer_name,optional,Map the name of the 3rd retailer from source where this product can be purchased.,Retailer C
+purchase_link_4_purchase_link,optional,Map the direct purchase URL from the 4th retailer.,https://www.retailer-d.com/product/product-slug
+purchase_link_4_retailer_logo_url,optional,Map the logo image URL for the 4th retailer from source.,https://cdn.example.com/retailers/retailer-d-logo.png
+purchase_link_4_retailer_name,optional,Map the name of the 4th retailer from source where this product can be purchased.,Retailer D
+purchase_link_5_purchase_link,optional,Map the direct purchase URL from the 5th retailer.,https://www.retailer-e.com/product/12345
+purchase_link_5_retailer_logo_url,optional,Map the logo image URL for the 5th retailer from source.,https://cdn.example.com/retailers/retailer-e-logo.png
+purchase_link_5_retailer_name,optional,Map the name of the 5th retailer from source where this product can be purchased.,Retailer E
+rating_count,optional,"Map the total number of customer ratings from source. When the Product Reviews tool is active, aggregates are written to product_feed.aggregate_reviews_data and this column is optional.",230
+rating_value,optional,"Map the average customer rating score from source. When the Product Reviews tool is active, aggregates are written to product_feed.aggregate_reviews_data and this column is optional.",4.5
+sku_id,optional,"Map the SKU (stock-keeping unit) identifier from source. More granular than item_id, unique per product variant (e.g. size, color).",XX-VARIANT-750ML
+sub_category,optional,"Map the narrower sub-category from source, within the main category.",Single Malt
+sub_title,expected,Map the secondary title or tagline from source — the line of text shown below the main title.,Premium Small Batch Collection

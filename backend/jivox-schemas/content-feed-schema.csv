@@ -1,0 +1,34 @@
+column_name,tier,description,example_format
+content_id,mandatory,Map the unique content identifier from the source CMS or system.,LSCNT-010
+content_name,mandatory,Map the main headline of the lifestyle content piece from source.,Content headline text (~5-15 words)
+content_slug,optional,"Map the URL-friendly content slug from source. Format: lowercase, hyphens instead of spaces, no special characters.",content-title-as-slug
+currency,optional,Map the currency code from source in ISO 4217 format. Use the currency as listed in the source for the region.,USD
+current_price,optional,Map the current selling price from source for the product or bundle featured in this content. Leave empty if no product tie-in.,49.99
+description,expected,"Map the brief teaser text from source (typically 1–2 sentences), used in content cards and listing previews.",Brief teaser or summary text from source... (~15-30 words)
+discount_percentage,optional,Map the discount percentage from source for the featured product or bundle.,28.6
+featured_product_1_image_url,optional,"Map the product image url for the first featured product from source, linked to this content.",https://cdn.example.com/content/product-image.jpg
+featured_product_1_product_id,expected,"Map the product id for the first featured product from source, linked to this content. Must match an existing product item_id.",PRD-001
+featured_product_2_image_url,optional,"Map the product image url for the second featured product from source, linked to this content.",https://cdn.example.com/content/product-image.jpg
+featured_product_2_product_id,optional,"Map the product id for the second featured product from source, linked to this content. Must match an existing product item_id.",PRD-002
+featured_product_3_image_url,optional,"Map the product image url for the third featured product from source, linked to this content.",https://cdn.example.com/content/product-image.jpg
+featured_product_3_product_id,optional,"Map the product id for the third featured product from source, linked to this content. Must match an existing product item_id.",PRD-003
+gallery_image_1,optional,Map the image URL for the 1st gallery image.,https://cdn.example.com/content/content-gallery-1.jpg
+gallery_image_2,optional,Map the image URL for the 2nd gallery image.,https://cdn.example.com/content/content-gallery-2.jpg
+gallery_image_3,optional,Map the image URL for the 3rd gallery image.,https://cdn.example.com/content/content-gallery-3.jpg
+gallery_image_4,optional,Map the image URL for the 4th gallery image.,https://cdn.example.com/content/content-gallery-4.jpg
+gallery_image_5,optional,Map the image URL for the 5th gallery image.,https://cdn.example.com/content/content-gallery-5.jpg
+is_active,optional,Map the publish status from source. Indicates whether the content is currently visible.,true
+landing_url,optional,Map the destination URL from source — where the user lands when clicking through on this content.,https://www.example.com/lifestyle/content-slug
+primary_image,mandatory,"Map the wide-format hero image URL from source, displayed at the top of the content detail page.",https://cdn.example.com/content/content-hero.jpg
+rating_value,optional,Map the average reader rating for this content from source.,4.6
+section_1_content,expected,Map the body text of the 1st content section from source.,Section body text from source... (~20-50 words)
+section_1_label,expected,Map the heading of the 1st content section from source.,Section heading (~3-8 words)
+section_2_content,optional,Map the body text of the 2nd content section from source.,Section body text from source... (~20-50 words)
+section_2_label,optional,Map the heading of the 2nd content section from source.,Section heading (~3-8 words)
+section_3_content,optional,Map the body text of the 3rd content section from source.,Section body text from source... (~20-50 words)
+section_3_label,optional,Map the heading of the 3rd content section from source.,Section heading (~3-8 words)
+section_4_content,optional,Map the body text of the 4th content section from source.,Section body text from source... (~20-50 words)
+section_4_label,optional,Map the heading of the 4th content section from source.,Section heading (~3-8 words)
+section_5_content,optional,Map the body text of the 5th content section from source.,Section body text from source... (~20-50 words)
+section_5_label,optional,Map the heading of the 5th content section from source.,Section heading (~3-8 words)
+sub_title,expected,Map the secondary title or tagline from source — the line shown below the main title.,Subtitle or tagline text (~5-10 words)

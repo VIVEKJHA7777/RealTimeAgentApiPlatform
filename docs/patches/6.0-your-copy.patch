@@ -1,0 +1,59 @@
+--- backend/src/config/env.ts	2026-10-12 03:59:29
++++ backend/src/config/env.ts	2026-10-12 03:59:29
+@@ -51,6 +51,26 @@
+       .transform((v) => v.replace(/\/+$/, ''))
+       .optional(),
+   ),
++
++  // ── Running on a server (task 6.0) ──
++  // Who may create an account. Not set: anyone in development, NOBODY in production (the app is on
++  // the internet). "*" = anyone; or a comma list of emails and "@domain" endings:
++  //   SIGNUP_ALLOWED_EMAILS=vivek@jivox.com,@jivox.com
++  SIGNUP_ALLOWED_EMAILS: z.string().trim().max(5000).optional(),
++  // Login + sign-up attempts per IP per 15 minutes (guards passwords and the CPU that hashing
++  // them costs). 0 = no limit. Not set: 0 in development (test scripts sign up a lot), 30 in production.
++  AUTH_ATTEMPTS_PER_15_MIN: z.coerce.number().int().min(0).max(10_000).optional(),
++  // How many proxies sit in front of the app (Render: 1), so req.ip is the caller's real address.
++  // 0 = none (local). Never more than there really are: the extra X-Forwarded-For hops are forgeable.
++  TRUST_PROXY: z.coerce.number().int().min(0).max(5).default(0),
++  // The built frontend (frontend/dist) served by this server, so the whole app is one https
++  // address (the login cookie then works without CORS). Not set: ../frontend/dist when it exists.
++  FRONTEND_DIST: z.string().min(1).optional(),
++  // Set by Render on every service ("https://<name>.onrender.com"): the default PUBLIC_BASE_URL there.
++  RENDER_EXTERNAL_URL: z.preprocess(
++    (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
++    z.url({ protocol: /^https?$/ }).optional(),
++  ),
+ });
+ 
+ const parsed = envSchema.safeParse(process.env);
+@@ -60,8 +80,10 @@
+   process.exit(1);
+ }
+ 
++const production = parsed.data.NODE_ENV === 'production';
+ export const env = {
+   ...parsed.data,
+-  PUBLIC_BASE_URL: parsed.data.PUBLIC_BASE_URL ?? `http://localhost:${parsed.data.PORT}`,
++  PUBLIC_BASE_URL:
++    parsed.data.PUBLIC_BASE_URL ?? parsed.data.RENDER_EXTERNAL_URL?.replace(/\/+$/, '') ?? `http://localhost:${parsed.data.PORT}`,
++  AUTH_ATTEMPTS_PER_15_MIN: parsed.data.AUTH_ATTEMPTS_PER_15_MIN ?? (production ? 30 : 0),
+ };
+-
+--- backend/.env.example	2026-10-12 03:59:29
++++ backend/.env.example	2026-10-12 03:59:29
+@@ -10,3 +10,14 @@
+ LOG_FILE=logs/app.log
+ # postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+ DATABASE_URL="postgresql://vivekkumarjha@localhost:5432/api-platform-vivek"
++
++# ── Running on a server (task 6.0; see docs/DEPLOY-render-neon.md) ──
++# Who may create an account. Not set: anyone in development, NOBODY in production.
++# "*" = anyone; or emails and "@domain" endings, comma-separated:
++# SIGNUP_ALLOWED_EMAILS=you@jivox.com,@jivox.com
++# Login + sign-up attempts per IP per 15 min (default: 0 = off in development, 30 in production)
++# AUTH_ATTEMPTS_PER_15_MIN=30
++# Proxies in front of the app (Render: 1), so the caller's real IP is used. Local: 0
++# TRUST_PROXY=0
++# The built frontend served by the backend (production does this by itself from ../frontend/dist)
++# FRONTEND_DIST=../frontend/dist

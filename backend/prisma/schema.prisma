@@ -1,0 +1,320 @@
+// Database schema. Each `model` becomes one table.
+// Docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// A person who can log in to the website. A user can own many brands.
+model User {
+  id           String   @id @default(cuid())
+  // Always stored trimmed + lower-cased (done in code before saving).
+  // @unique = enforced by Postgres, so two sign-ups racing with the same email
+  // cannot both succeed: the second one gets a unique-constraint error.
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  createdAt    DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  sessions      Session[]
+  organizations Organization[]
+
+  @@map("users")
+}
+
+// One row per logged-in browser. A user can have many at once (laptop, phone...).
+model Session {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  // SHA-256 of the random token in the cookie. The token itself is never stored.
+  tokenHash String   @unique @map("token_hash")
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(3)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // Deleting a user deletes all their sessions (logs them out everywhere).
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId]) // "log out everywhere" / list a user's sessions
+  @@index([expiresAt]) // cleaning up expired sessions
+  @@map("sessions")
+}
+
+// A brand. Exactly one owner; the owner is the only account that can manage it.
+// One owner can have many brands (no team members, no roles).
+model Organization {
+  id        String   @id @default(cuid())
+  ownerId   String   @map("owner_id")
+  name      String
+  // Used in public API URLs (/v1/<slug>/...). Unique across all brands; never changes.
+  slug      String   @unique
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  owner User @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  dataSources DataSource[]
+  dataImports DataImport[]
+  apis        Api[]
+
+  @@index([ownerId]) // "list my brands" stays fast
+  @@map("organizations")
+}
+
+// ─────────────────────────────── Phase 2: data + APIs ───────────────────────────────
+
+// Data that APIs answer from (e.g. an uploaded CSV). Belongs to a brand; several APIs can use it.
+model DataSource {
+  id               String    @id @default(cuid())
+  organizationId   String    @map("organization_id")
+  name             String
+  // Which connector produced the data: "csv" today; "json", "google_sheet"... later.
+  // Plain text (not an enum) on purpose: adding a new source needs no database migration.
+  kind             String
+  // Connector-specific settings (e.g. a Google Sheet URL). Empty for uploaded files.
+  config           Json      @default("{}")
+  // The column whose value identifies a row (e.g. "sku"). Fixed after creation.
+  idColumn         String    @map("id_column")
+  // ["sku", "name", "price", ...]: column names in file order (from the active version)
+  columns          Json      @default("[]")
+  rowCount         Int       @default(0) @map("row_count")
+  // Which version of the rows is live. Null until the first import succeeds.
+  // An import writes a NEW generation, then switches this number in one tiny update,
+  // so readers always see one complete version, never half of an import.
+  activeGeneration Int?      @map("active_generation")
+  lastImportAt     DateTime? @map("last_import_at") @db.Timestamptz(3)
+  createdAt        DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  records      DataRecord[]
+  imports      DataImport[]
+  apis         Api[]
+
+  @@unique([organizationId, name]) // no two data sources with the same name in one brand
+  @@unique([id, organizationId]) // target of the composite foreign keys below
+  @@map("data_sources")
+}
+
+// One import run (a background job): reading a file/source into a new generation of rows.
+model DataImport {
+  id             String    @id @default(cuid())
+  organizationId String    @map("organization_id")
+  dataSourceId   String    @map("data_source_id")
+  // "initial" | "replace" | "merge"
+  mode           String
+  // "queued" | "running" | "succeeded" | "failed"
+  // A partial unique index (added by hand in the migration SQL) allows only ONE queued/running
+  // import per data source: a second upload at the same time gets 409 from the database.
+  status         String    @default("queued")
+  generation     Int // the generation this import writes into
+  fileName       String?   @map("file_name")
+  fileSize       Int?      @map("file_size")
+  // Internal: where the uploaded file waits on disk until the job reads it. Never sent to the browser.
+  tempPath       String?   @map("temp_path")
+  processedRows  Int       @default(0) @map("processed_rows")
+  // While running: about how many rows the whole file has (from how far into the file we are),
+  // so the progress bar can show "312 000 / about 500 000 rows". Null until known.
+  estimatedRows  Int?      @map("estimated_rows")
+  inserted       Int       @default(0)
+  updated        Int       @default(0)
+  unchanged      Int       @default(0)
+  deleted        Int       @default(0)
+  // Up to 5 problems with row numbers, e.g. [{ "row": 57, "message": "has 5 values, header has 4" }]
+  problems       Json      @default("[]")
+  errorCode      String?   @map("error_code")
+  startedAt      DateTime? @map("started_at") @db.Timestamptz(3)
+  finishedAt     DateTime? @map("finished_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Composite key: the import's brand must be the data source's brand (enforced by Postgres).
+  dataSource   DataSource   @relation(fields: [dataSourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  @@index([dataSourceId, createdAt])
+  @@index([status]) // finding interrupted jobs when the server starts
+  @@map("data_imports")
+}
+
+// One row of a data source, in one generation.
+// "DataRecord", not "Record": Record is a built-in TypeScript type name.
+model DataRecord {
+  // A plain auto-increment number: bulk inserts of 500 000 rows don't need ids from our code.
+  id             BigInt   @id @default(autoincrement())
+  organizationId String   @map("organization_id")
+  dataSourceId   String   @map("data_source_id")
+  generation     Int
+  // The id column's value, e.g. "SKU-1001" (not repeated inside `data`).
+  // Compared byte by byte (COLLATE "C", set in migration records_external_id_byte_order) so
+  // the unique index below also answers id prefix searches ("SKU-12…") on 500 000 rows.
+  externalId     String   @map("external_id")
+  // 1-based row order in the file, so downloads come back in the same order.
+  position       Int
+  // The other cells as text exactly as written; empty cell = null. {"price": "79.99", "color": null}
+  data           Json
+  createdAt      DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+
+  // ONE foreign key on purpose (it's checked for every row of a 500 000-row import):
+  // (data_source_id, organization_id) → data_sources guarantees the row's brand = its data
+  // source's brand, and data sources are deleted with their brand. A second key to
+  // organizations would be redundant and made imports ~2.5 s slower (benchmark, task 2.3).
+  dataSource DataSource @relation(fields: [dataSourceId, organizationId], references: [id, organizationId], onDelete: Cascade)
+
+  // Ids are unique within one version of the data, even if two writes race.
+  @@unique([dataSourceId, generation, externalId])
+  @@index([dataSourceId, generation, position]) // pages + download in file order
+  @@map("records")
+}
+
+enum FeedType {
+  product
+  review
+  store
+  content
+
+  @@map("feed_type")
+}
+
+enum ApiStatus {
+  draft
+  published
+
+  @@map("api_status")
+}
+
+// How Jivox sends an API's token (chosen per API, Phase 4).
+//   x_api_key → `X-Api-Key: <token>`        bearer → `Authorization: Bearer <token>`
+enum AuthHeader {
+  x_api_key
+  bearer
+
+  @@map("auth_header")
+}
+
+// A realtime API of a brand. Answers from exactly one data source of the SAME brand.
+model Api {
+  id             String     @id @default(cuid())
+  organizationId String     @map("organization_id")
+  dataSourceId   String     @map("data_source_id")
+  name           String
+  // Part of the public URL /v1/<brand-slug>/<api-slug>. Unique within the brand; fixed.
+  slug           String
+  feedType       FeedType   @default(product) @map("feed_type")
+  status         ApiStatus  @default(draft)
+  // Phase 3: what the API sends and how Jivox asks (fields + request template), as JSON.
+  // Null until the first save. Validated by modules/apis/design (one Zod schema).
+  design         Json?      @db.Json // plain json (not jsonb): keeps keys in the order written (request templates)
+  // +1 on every design save. A save must send the version it loaded; if someone saved in
+  // between, it's refused (409 DESIGN_CHANGED) instead of silently overwriting their work.
+  designVersion  Int        @default(0) @map("design_version")
+  // Phase 4: which header carries the token, and when the API was last published (null = never).
+  authHeader     AuthHeader @default(x_api_key) @map("auth_header")
+  publishedAt    DateTime?  @map("published_at") @db.Timestamptz(3)
+  createdAt      DateTime   @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime   @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  // Composite key: an API can only use a data source of its own brand (enforced by Postgres).
+  // NoAction: a data source used by an API can't be deleted (checked at the end of the statement,
+  // so deleting a whole brand, which removes APIs and data sources together, still works).
+  dataSource   DataSource   @relation(fields: [dataSourceId, organizationId], references: [id, organizationId], onDelete: NoAction)
+  tokens       ApiToken[]
+  recentCalls  ApiRecentCalls?
+  jivoxAgents  JivoxAgent[]
+
+  @@unique([organizationId, slug])
+  @@index([dataSourceId])
+  @@map("apis")
+}
+
+// A secret that lets a caller (Jivox) use ONE API on /v1. An API can have several (rotation).
+// The token itself is `rtk_` + 43 random characters. We keep it two ways:
+//   - token_hash: SHA-256, checked on every /v1 call (one indexed lookup; fast).
+//   - token_encrypted: AES-256-GCM with TOKEN_ENCRYPTION_KEY (only in .env, never in the DB),
+//     so the owner can view / copy it again later. Deleted (null) when the token is revoked.
+// A stolen database alone gives no usable token.
+// Active = revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now()).
+model ApiToken {
+  id             String    @id @default(cuid())
+  apiId          String    @map("api_id")
+  name           String
+  tokenHash      String    @unique @map("token_hash")
+  tokenEncrypted String?   @map("token_encrypted")
+  // First 8 characters ("rtk_8Hf2"), shown in lists so you can tell tokens apart.
+  hint           String
+  expiresAt      DateTime? @map("expires_at") @db.Timestamptz(3) // null = never expires
+  revokedAt      DateTime? @map("revoked_at") @db.Timestamptz(3) // set once; a revoked token is final
+  // Updated at most once a minute per token (a write per call would slow /v1 under load).
+  lastUsedAt     DateTime? @map("last_used_at") @db.Timestamptz(3)
+  createdAt      DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  // Deleting an API deletes its tokens (they could never be used again anyway).
+  api         Api          @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  jivoxAgents JivoxAgent[]
+
+  @@unique([id, apiId]) // lets an agent point at "a token of THIS API" (composite foreign key)
+  @@index([apiId, createdAt]) // the API's token list, oldest first
+  @@map("api_tokens")
+}
+
+// The last 5 calls to an API's live URL (task 4.8b), shown on its Test tab ("Recent calls"), so the
+// owner can see what Jivox (or anyone) sent and what /v1 answered, including failures (no token,
+// expired, wrong header…). One row per API holding a JSON list, newest first. /v1 keeps new calls
+// in memory and saves them at most once a second per API (never delaying the answer).
+// Never holds a token: the token headers aren't stored, and token-shaped text is scrubbed.
+model ApiRecentCalls {
+  apiId     String    @id @map("api_id")
+  calls     Json      @default("[]") // RecentCall[] (modules/v1/recent-calls.ts), newest first, at most 5
+  // "Clear" time: calls made before it are never added back (e.g. one being saved at that moment).
+  clearedAt DateTime? @map("cleared_at") @db.Timestamptz(3)
+  updatedAt DateTime  @default(now()) @map("updated_at") @db.Timestamptz(3)
+
+  api Api @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+  @@map("api_recent_calls")
+}
+
+// A Jivox Real Time Agent this API serves (Phase 5). One API can serve many agents (several
+// brandstores / agents in Jivox Studio); each gets its own contract with only its fields.
+// The agent's MCP access key (from Studio's "access keys") is kept encrypted (lib/secret-box.ts,
+// bound to this row's id) and never shown again; the hint is its last 2 characters.
+model JivoxAgent {
+  id                 String    @id @default(cuid())
+  apiId              String    @map("api_id")
+  name               String // unique per API, any case (hand-written index)
+  brandstore         String? // a label only, e.g. "axas-c63e9"
+  // Jivox column names this agent is bound to (from Jivox, or picked by hand until a key is saved).
+  fields             String[]  @default([])
+  // The token Jivox uses for this agent (the user pastes it in Studio). Must be a token of THIS API.
+  tokenId            String?   @map("token_id")
+  mcpUrl             String?   @map("mcp_url")
+  accessKeyEncrypted String?   @map("access_key_encrypted")
+  accessKeyHint      String?   @map("access_key_hint")
+  sampleIds          String[]  @default([]) @map("sample_ids") // empty = the first 2 rows
+  // What Jivox last told us about the agent (feed type, id column, bound fields, schema), and when.
+  agentInfo          Json?     @map("agent_info")
+  agentInfoAt        DateTime? @map("agent_info_at") @db.Timestamptz(3)
+  lastError          String?   @map("last_error")
+  // The contract the user last took out (5.6): copied or downloaded. Its shape (the document
+  // without the sample answer / sample request) is compared with today's to say "out of date".
+  lastContractAt            DateTime? @map("last_contract_at") @db.Timestamptz(3)
+  lastContractHow           String?   @map("last_contract_how") // copy | download (Phase 6: submit)
+  lastContractDesignVersion Int?      @map("last_contract_design_version")
+  lastContractShape         Json?     @map("last_contract_shape")
+  createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  api   Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  // NoAction: tokens are only ever deleted together with their API (which deletes its agents in
+  // the same statement); revoked tokens stay as rows. Checked at the end of the statement.
+  token ApiToken? @relation(fields: [tokenId, apiId], references: [id, apiId], onDelete: NoAction)
+
+  @@index([apiId, createdAt]) // the API's agent list, oldest first
+  @@map("jivox_agents")
+}

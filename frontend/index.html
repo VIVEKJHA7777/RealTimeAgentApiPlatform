@@ -1,0 +1,21 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>API Platform</title>
+    <script>
+      // Dark mode follows the computer's setting (and changes live when the setting changes).
+      // Runs before React loads, so the page never flashes in the wrong theme.
+      const darkQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      const applyTheme = () => document.documentElement.classList.toggle('dark', darkQuery.matches)
+      applyTheme()
+      darkQuery.addEventListener('change', applyTheme)
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

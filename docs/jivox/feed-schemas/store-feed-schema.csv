@@ -1,0 +1,25 @@
+column_name,tier,description,example_format
+address_full,optional,"Map the full street address from source on a single line, including city, state/province, postal code, and country. Use the address format appropriate to the store's region.","123 Main St, City, State 00000, Country"
+address_line_1,optional,"Map the first line of the store's street address from source, excluding city, state/province, postal code, and country.",123 Main St
+address_line_2,optional,"Map the second line of the store's street address from source, excluding city, state/province, postal code, and country.",123 Main St
+city,optional,Map the store's city from source.,City
+country,optional,Map the store's country from source.,Country
+directions_url,optional,Map the map/navigation URL from source so the user can get directions directly.,"https://www.google.com/maps/dir/?api=1&destination=lat,lng"
+email,optional,Map the store's contact email address from source.,store@example.com
+is_active,optional,Map the store's operational status from source. Indicates whether the store is currently active and should appear in results.,true
+latitude,mandatory,Map the store's geographic latitude in decimal degrees from source.,40.7128
+longitude,mandatory,Map the store's geographic longitude in decimal degrees from source.,-74.006
+operating_hours,optional,Map the store operating hours from source as a human-readable string.,"Mon-Sat: 08:00-22:00, Sun: 10:00-18:00"
+phone_number,optional,Map the store's contact phone number from source. Use the format as it appears in the source (E.164 international or local).,+10005551234
+postal_code,optional,Map the store's zip code or postal code from source.,670141
+retailer_logo,optional,Map the parent retailer's corporate logo image URL from source.,https://cdn.example.com/retailers/parent-logo.png
+retailer_name,mandatory,Map the name of the parent retailer or chain that operates this store from source.,Parent Retailer Inc.
+state,optional,Map the store's state or province from source.,State
+store_classification,optional,"Map the store's tier or category label from source, used for targeting, filtering, or prioritization.",Tier 1 / Supermarket
+store_id,mandatory,Map the unique store identifier from the retailer's system.,STR-001
+store_logo_url,optional,Map the store's logo image URL from source.,https://cdn.example.com/stores/store-logo.png
+store_name,mandatory,"Map the store's display name from source, as customers would recognize it, including branch identifier if applicable.",Store Chain Location #101
+store_rating_count,optional,Map the total number of ratings for the store's parent retailer from source.,12540
+store_rating_value,optional,Map the average rating score for the store's parent retailer from source.,4.4
+store_type,optional,"Map the store type from source — whether the store is a physical location or online-only. Values: online, offline.",offline
+website_url,optional,Map the store's page URL from source.,https://www.example.com/store/store-id

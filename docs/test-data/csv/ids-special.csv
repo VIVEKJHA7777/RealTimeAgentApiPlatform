@@ -1,0 +1,8 @@
+sku,name
+A_1,underscore
+AB1,letter B (must NOT match a search for A_)
+A%1,percent
+A%%,two percent signs
+A\1,backslash
+a_1,lower-case a
+B-1,other

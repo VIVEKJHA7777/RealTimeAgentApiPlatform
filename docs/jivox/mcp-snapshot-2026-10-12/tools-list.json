@@ -1,0 +1,78 @@
+{
+  "tools": [
+    {
+      "name": "get_contract_spec",
+      "description": "How to write a realtime contract: the template, the dictated response\nenvelope, the rules, two worked samples, the lifecycle, and your agent's own\nfacts (feed type, id column, bound fields, credential).",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_contract_specArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "get_canonical_schema",
+      "description": "The full feed schema for your agent's feed type. Each field carries its type,\ntier and description, plus is_id (the id column, always the first field of a\ncontract) and bound_to_this_agent (outputs only: at least one of them must be in\nfields, and none may be a {column} input).",
+      "inputSchema": {
+        "properties": {},
+        "title": "get_canonical_schemaArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "submit_contract",
+      "description": "Submit a contract document in its final form (see get_contract_spec).\n\nThe platform validates it, gates it against your agent, and verifies it with one\nlive call built from sample_request. Every submit creates a new contract:\nverified with the next version number when all three pass, failed with no\nversion otherwise. The response says which step failed and how to fix it; fix\nthe document and submit again. When the response says verified, call\nactivate_contract with that version.\n\nArgs:\n    contract: the contract document.\n",
+      "inputSchema": {
+        "properties": {
+          "contract": {
+            "additionalProperties": true,
+            "title": "Contract",
+            "type": "object"
+          }
+        },
+        "required": [
+          "contract"
+        ],
+        "title": "submit_contractArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "list_contracts",
+      "description": "Your agent's verified contract versions, oldest first, and which one is\nactive. Failed and retired versions are never listed.",
+      "inputSchema": {
+        "properties": {},
+        "title": "list_contractsArguments",
+        "type": "object"
+      }
+    },
+    {
+      "name": "activate_contract",
+      "description": "Make one verified version the live contract. The gates and the live\nverification call run again first, so a version that no longer matches the\nagent or the API is refused with the evidence and nothing changes. On a\npublished composition, a version that sends a {column} input the composition\ndoes not map is refused. The previously active version becomes retired.\n\nArgs:\n    version: a version number from list_contracts.\n    test_user_token: for a user-credential contract only, a dummy token for the\n        re-verification call. Never stored.\n",
+      "inputSchema": {
+        "properties": {
+          "version": {
+            "title": "Version",
+            "type": "integer"
+          },
+          "test_user_token": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "title": "Test User Token"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "activate_contractArguments",
+        "type": "object"
+      }
+    }
+  ]
+}

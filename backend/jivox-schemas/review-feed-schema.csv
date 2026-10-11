@@ -1,0 +1,39 @@
+column_name,tier,description,example_format
+author_display_name,optional,Map the reviewer's display name from source. Use 'Anonymous' when the reviewer opted out of sharing a name.,JaneD
+author_location,optional,"Map the reviewer's self-reported location (city, region, or country).","Brooklyn, NY"
+brand_responder_name,optional,Map the display name of the brand responder. Required when brand_response_text is supplied.,Tanqueray Customer Care
+brand_response_date,optional,"Map the brand response publish date. Accepts ISO 8601 date (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:mm:ss[.fraction][Z|±HH:MM] or YYYY-MM-DD HH:mm:ss[.fraction]; two-digit hour/minute/second, e.g. 2024-06-18T09:15:00Z or 2024-06-18 09:15:00). Stored as the calendar date only (any time portion is discarded). Required when brand_response_text is supplied.",2024-06-18
+brand_response_text,optional,Map the official brand response to this review from source.,Thanks Jane — glad the London Dry is working for your martinis.
+cons,optional,"Map reviewer-supplied negatives, separate from review_text. Enter multiple values pipe-separated (|).",price | hard to find locally
+helpful_votes_up,optional,Map the count of helpful votes from source (integer ≥ 0).,42
+is_active,optional,Map whether this review row is active. Inactive rows are excluded from display.,true
+is_incentivized,optional,"Map whether the reviewer received a sample, discount, or other incentive. Must be TRUE when compensation occurred.",false
+is_recommended,optional,Map whether the reviewer would recommend the product to others.,true
+is_syndicated,optional,Map whether this review was syndicated from a retailer or partner site rather than collected directly.,true
+is_verified_purchase,optional,Map whether the reviewer's purchase was verified (e.g. order match). TRUE enables a 'Verified purchase' badge.,true
+item_id,mandatory,Map the product item_id this review belongs to. Used to associate the review with a product when displaying ratings and aggregated review data.,GIN_TANQ_LON_750
+locale,optional,"Map the review content locale in IETF form (language_REGION), e.g. en_US, en_GB, fr_FR.",en_US
+photo_1_caption,optional,Map the caption for the first review image.,My home bar setup with the bottle
+photo_1_url,optional,Map the HTTPS URL of the first image attached to this review.,https://cdn.example.com/reviews/RVW_8472911/photo_1.jpg
+photo_2_caption,optional,Map the caption for the second review image.,Pouring over ice
+photo_2_url,optional,Map the HTTPS URL of the second image attached to this review.,https://cdn.example.com/reviews/RVW_8472911/photo_2.jpg
+photo_3_caption,optional,Map the caption for the third review image.,Final martini
+photo_3_url,optional,Map the HTTPS URL of the third image attached to this review.,https://cdn.example.com/reviews/RVW_8472911/photo_3.jpg
+product_url,optional,Map the canonical product page URL where this review was originally collected (attribution for syndicated content).,https://www.example.com/products/london-dry-gin
+pros,optional,"Map reviewer-supplied positives, separate from review_text. Enter multiple values pipe-separated (|).",smooth | great aroma | versatile
+rating_value,mandatory,Map this reviewer's star rating from source. Integer values from 1 to 5 inclusive (e.g. 4 or 5); values outside that range are rejected.,4
+review_id,mandatory,Map the unique review identifier from source. Stable upsert key on re-upload — re-supplying the same review_id replaces the prior record.,RVW_8472911
+review_tags,optional,"Map short keywords describing what the review covers, as pipe-separated tags. Contributes to review search and aggregate filter-by-tag when the Product Reviews tool is enabled.",sensitive_skin | sharpness | durability
+review_text,mandatory,Map the review body from source. Prefer plain text without HTML markup; stored and displayed as provided.,"Smooth on the rocks, perfect for a martini. Aroma is bright, finish is clean."
+review_title,optional,Map the short review headline from source (typically 3–10 words).,Excellent everyday gin
+secondary_rating_1_label,optional,"Map the label of the first secondary rating dimension (Title Case), e.g. Aroma, Quality, Fit.",Aroma
+secondary_rating_1_scale_max,optional,Map the maximum value of the first secondary rating scale (required with label and value).,5
+secondary_rating_1_value,optional,Map the value of the first secondary rating on its native scale.,4.0
+secondary_rating_2_label,optional,Map the label of the second secondary rating dimension.,Smoothness
+secondary_rating_2_scale_max,optional,Map the maximum value of the second secondary rating scale.,5
+secondary_rating_2_value,optional,Map the value of the second secondary rating dimension.,5.0
+secondary_rating_3_label,optional,Map the label of the third secondary rating dimension.,Value for money
+secondary_rating_3_scale_max,optional,Map the maximum value of the third secondary rating scale.,5
+secondary_rating_3_value,optional,Map the value of the third secondary rating dimension.,4.0
+submission_date,mandatory,"Map the review submission date from source. Accepts ISO 8601 date (YYYY-MM-DD) or datetime (YYYY-MM-DDTHH:mm:ss[.fraction][Z|±HH:MM] or YYYY-MM-DD HH:mm:ss[.fraction]; two-digit hour/minute/second, e.g. 2024-06-15T14:30:00Z or 2024-06-15 14:30:00). Stored as the calendar date only (any time portion is discarded).",2024-06-15
+syndication_source,optional,"Map the retailer or partner name where the review was originally collected, when is_syndicated is TRUE.",Total Wine & More

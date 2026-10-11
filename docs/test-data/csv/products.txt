@@ -1,0 +1,2 @@
+sku,price
+X-1,1

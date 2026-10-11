@@ -1,0 +1,13 @@
+sku,name,price,currency,in_stock,color,category
+SKU-1001,Product 1,20.99,USD,true,blue,apparel
+SKU-1002,Product 2,21.99,USD,true,black,shoes
+SKU-1003,Product 3,22.99,USD,false,red,apparel
+SKU-1004,Product 4,23.99,USD,true,blue,shoes
+SKU-1005,Product 5,24.99,USD,true,black,apparel
+SKU-1006,Product 6,25.99,USD,false,red,shoes
+SKU-1007,Product 7,26.99,USD,true,blue,apparel
+SKU-1008,Product 8,27.99,USD,true,black,shoes
+SKU-1009,Product 9,28.99,USD,false,red,apparel
+SKU-1010,Product 10,29.99,USD,true,blue,shoes
+SKU-1011,Product 11,30.99,USD,true,black,apparel
+SKU-1012,Product 12,31.99,USD,false,red,shoes

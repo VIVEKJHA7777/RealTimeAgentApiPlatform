@@ -1,0 +1,479 @@
+=====================================================================
+  REALTIME API PLATFORM - BUILD PLAN (DRAFT FOR REVIEW)
+=====================================================================
+
+Status   : Draft. Nothing is built yet. Review and mark changes.
+Stack    : Node.js + Express (backend), React (frontend), PostgreSQL
+Date     : 9 Oct 2026
+
+
+---------------------------------------------------------------------
+PART 1. WHAT ARE WE BUILDING? (IN ONE MINUTE)
+---------------------------------------------------------------------
+
+We are building ONE website + ONE backend server that many brands
+can share.
+
+  - A brand signs up on our website.
+  - The brand uploads its product data (a CSV file, e.g. sku + price).
+  - The brand creates an "API" with a few clicks (no coding).
+  - Our website gives the brand:
+        1. an API URL      (where to call)
+        2. an access token (the secret key that proves who is calling)
+  - The brand pastes these into BrandStore Studio -> Real Time Agent.
+  - Now Jivox can call our API and get LIVE prices for that brand.
+
+All brands use the SAME server. Their data never mixes.
+
+Why we need it: to test the Jivox Real Time Agent we need a real,
+public API that answers in the exact "contract" format. This project
+gives us that API, and it teaches us backend + frontend + database +
+security along the way.
+
+
+---------------------------------------------------------------------
+PART 2. THE MOST IMPORTANT QUESTION
+        "When Jivox calls us with a token, how do we know which
+         brand it is?"
+---------------------------------------------------------------------
+
+Short answer: THE TOKEN ITSELF TELLS US.
+
+Every token we create is saved in our database next to the brand
+(and the API) it belongs to. When a call comes in, we look the token
+up, and the database row tells us the brand.
+
+Think of it like a hotel key card:
+  - Reception (our website) makes a card for Room 204 (Brand A).
+  - The card does not have "Room 204" printed on it, but the door
+    system knows which room the card belongs to.
+  - If you lose the card, reception cancels it and makes a new one.
+
+---------------------------------------------------------------------
+2.1  STEP-BY-STEP FLOW (from sign-up to a live price in chat)
+---------------------------------------------------------------------
+
+ STEP 1  Brand signs up on OUR website
+         "Acme Shoes" creates an account and an organization.
+
+ STEP 2  Brand uploads data
+         Acme uploads products.csv:
+             sku,       price,  category
+             SKU-1001,  79.99,  shoes
+             SKU-2049,  129.00, shoes
+         Acme tells us: "sku is my unique id column".
+         We save every row in our database, tagged "belongs to Acme".
+
+ STEP 3  Brand creates an API (with clicks)
+         Acme picks:
+             - which dataset      : products
+             - which fields to return : price
+             - the method         : GET  (POST later)
+         We save this as an "API config", tagged "belongs to Acme".
+         We show Acme its URL, for example:
+             https://our-platform.com/v1/acme-shoes/live/prices
+
+ STEP 4  Brand generates an access token
+         Acme clicks "Generate token". We create a long random secret:
+             rtk_8Hf2k...Q9zP     (about 40 random characters)
+         - We SHOW it to Acme ONE TIME only.
+         - We SAVE only a scrambled version of it (a "hash"),
+           plus a note: "this token belongs to Acme, API = live/prices".
+         - Even if someone steals our database, they cannot get
+           the real token back from the hash.
+
+ STEP 5  Brand goes to BrandStore Studio (Jivox)
+         Data Sources -> Real-time data -> Add Real Time Agent
+         - selects the fields (e.g. current_price)
+         - pastes OUR token as the "standing service token"
+         Jivox stores the token safely in its parameter store.
+
+ STEP 6  The contract is written (by the Jivox author agent)
+         The contract tells Jivox how to call us:
+             base_url             : https://our-platform.com/v1/acme-shoes
+             path                 : /live/prices
+             service_header       : X-Api-Key
+             service_value_format : {token}
+             query                : ids = {item_id}
+         So Jivox will send our token in the "X-Api-Key" header.
+
+ STEP 7  Jivox verifies the contract (one test call to us)
+             GET /v1/acme-shoes/live/prices?ids=SKU-1001,SKU-2049
+             X-Api-Key: rtk_8Hf2k...Q9zP
+         We answer correctly -> contract becomes "verified".
+         Then it is activated in Studio.
+
+ STEP 8  Real use: a shopper asks ChatGPT about Acme shoes
+         Jivox calls us again with the current product ids,
+         we return live prices, Jivox shows them to the shopper.
+
+---------------------------------------------------------------------
+2.2  WHAT HAPPENS INSIDE OUR SERVER FOR EVERY CALL
+---------------------------------------------------------------------
+
+ Incoming:  GET /v1/acme-shoes/live/prices?ids=SKU-1001,SKU-9999
+            X-Api-Key: rtk_8Hf2k...Q9zP
+
+  1. Read the token from the X-Api-Key header.
+       No token?                    -> 401 Unauthorized. Stop.
+
+  2. Scramble (hash) the token the same way we did when we made it,
+     and search the tokens table for that hash.
+       Not found / cancelled?       -> 401 Unauthorized. Stop.
+       Found -> the row says: brand = Acme, api = live/prices.
+       >>> THIS IS HOW WE KNOW WHICH BRAND IT IS. <<<
+
+  3. Double-check the URL matches the token.
+       URL says "acme-shoes" + "live/prices".
+       Token says Acme + live/prices.        -> OK, continue.
+       If Brand B's token is used on Acme's URL -> 403 Forbidden.
+       (So one brand can never read another brand's data,
+        even if it guesses the URL.)
+
+  4. Read the ids: "SKU-1001,SKU-9999" -> ["SKU-1001", "SKU-9999"]
+
+  5. Search the database:
+       "products WHERE brand = Acme AND sku IN (SKU-1001, SKU-9999)"
+       The "brand = Acme" part is ALWAYS added. This is the
+       wall between brands.
+
+  6. Build the answer in the exact contract format:
+       {
+         "status": "success",
+         "generated_at": "2026-10-09T10:00:00Z",
+         "data":   [ { "sku": "SKU-1001", "price": 79.99 } ],
+         "errors": [ { "error_id": "SKU-9999",
+                       "error_code": "NOT_FOUND",
+                       "error_message": "unknown sku" } ]
+       }
+
+  7. Add the header  Cache-Control: no-store   and send it.
+     Whole thing must finish well under 3 seconds.
+
+  8. Write a small log line (time, brand, ids count, status).
+     NEVER write the token itself in logs.
+
+---------------------------------------------------------------------
+2.3  WHY BOTH A TOKEN AND A BRAND NAME IN THE URL?
+---------------------------------------------------------------------
+
+  - The TOKEN is the real proof of identity. It is secret.
+  - The URL (/v1/acme-shoes/live/prices) is just an address.
+    Anyone can see it. It is NOT proof of anything.
+  - We keep the brand name in the URL because it makes logs and
+    debugging easy to read, and Jivox needs a fixed base_url
+    anyway. But we always trust the token, never the URL.
+
+---------------------------------------------------------------------
+2.4  TOKEN RULES (SECURITY, IN SIMPLE WORDS)
+---------------------------------------------------------------------
+
+  - Token is long and random (cannot be guessed).
+  - Starts with "rtk_" so a human can recognise it as our token.
+  - Shown once. If lost, generate a new one.
+  - We store only the hash, never the real token.
+  - A brand can cancel ("revoke") a token any time. A cancelled
+    token stops working immediately.
+  - One token belongs to one brand. (Later: one token per API.)
+  - Never put the token in the URL. Only in the header.
+  - Never print the token in logs or error messages.
+
+---------------------------------------------------------------------
+2.5  OPEN QUESTION FOR YOU (please decide)
+---------------------------------------------------------------------
+
+  Should one token open ALL of a brand's APIs, or only ONE API?
+
+    Option A - one token per brand (simpler)
+        Easy to manage. But if leaked, all that brand's APIs open.
+    Option B - one token per API (safer)
+        Matches Jivox nicely: one Real Time Agent = one API = one
+        token. A leak affects only that API.
+
+  My suggestion: start with A in Phase 5 (simpler to learn),
+  switch to B in Phase 8 when we build the real-time features.
+
+
+---------------------------------------------------------------------
+PART 3. TECH STACK
+---------------------------------------------------------------------
+
+ Frontend (the website brands use)
+   - React + TypeScript
+   - Vite            (fast dev server / build tool for React)
+   - React Router    (pages)
+   - Tailwind CSS + shadcn/ui (styling and ready-made components)
+
+ Backend (the server that does the work)
+   - Node.js + Express + TypeScript
+   - Prisma          (talks to the database in TypeScript)
+   - PostgreSQL      (the database)
+   - Zod             (checks that incoming data is valid)
+
+ Tools
+   - Docker Compose  (runs PostgreSQL on our laptop)
+   - Git + GitHub
+   - ngrok or cloudflared (temporary public URL so Jivox qa3 can
+     reach our laptop, until we deploy properly)
+
+ Not now (later, only when needed): Redis, BullMQ, cloud storage,
+ automated tests.
+
+
+---------------------------------------------------------------------
+PART 4. HOW THE PIECES TALK TO EACH OTHER
+---------------------------------------------------------------------
+
+   Brand's browser
+        |
+        v
+   React website (localhost:5173)
+        |  /api/*  (Vite forwards these to the backend)
+        v
+   Express server (localhost:4000) <------ Jivox calls /v1/*
+        |                                  with X-Api-Key token
+        v
+   PostgreSQL (Docker, localhost:5432)
+
+ The Express server has TWO doors:
+   /api/*  -> for our website. User must be logged in (cookie).
+   /v1/*   -> for outside callers like Jivox. Needs a token.
+
+ There is only ONE server for all brands. Every database row has a
+ "brand id" (organizationId), and every query filters by it.
+
+
+---------------------------------------------------------------------
+PART 5. DATABASE (FIRST VERSION, PLAIN WORDS)
+---------------------------------------------------------------------
+
+  users          - people who log in (email, hashed password)
+  organizations  - brands (e.g. Acme Shoes, slug "acme-shoes")
+  (no memberships table: one account = one brand, via organizations.owner_id)
+  sessions       - who is logged in right now (for the website)
+  projects       - a brand's workspace (a brand can have several)
+  datasets       - an uploaded file's info: name, id column, columns
+  records        - one row per product:
+                     brand id, dataset id,
+                     external_id  (e.g. "SKU-1001"),
+                     data         (the rest of the row as JSON:
+                                   { "price": 79.99, "category": "shoes" })
+  api_configs    - (Phase 6+) the API a brand built with clicks:
+                     path, method, dataset, id field, response fields
+  api_tokens     - token hash, brand id, (later) api id,
+                     first 8 chars for display, created, revoked
+
+ Why "data as JSON" instead of fixed price columns?
+   Every brand's CSV looks different. JSON lets us store any columns
+   without changing the database for each brand.
+
+
+---------------------------------------------------------------------
+PART 6. PHASES (SMALL STEPS, EACH ONE WORKS BEFORE THE NEXT)
+---------------------------------------------------------------------
+
+ For every phase, the rules are:
+   - I explain the goal and the "why" first.
+   - We build small tasks, one at a time.
+   - You run it and check it manually.
+   - We move on only after you say it works.
+
+ -------------------------------------------------------------
+ PHASE 0 - Agree on the plan          (this document)
+ -------------------------------------------------------------
+   - You review this file, mark changes, answer open questions.
+   - Create the GitHub repo.
+   Done when: we both agree on scope.
+
+ -------------------------------------------------------------
+ PHASE 1 - Empty app that runs
+ -------------------------------------------------------------
+   Tasks
+     1. Folder setup: /backend, /frontend, docker-compose.yml, README
+     2. PostgreSQL running in Docker
+     3. Express server with GET /health  -> { "status": "ok" }
+     4. Prisma connected; /health also says  "db": "up"
+     5. Error handler + simple request logs
+     6. React app (Vite + Tailwind + shadcn) with an empty dashboard
+     7. Dashboard shows a green "Backend OK" badge (calls /api/health)
+   Check: open browser, see the green badge. Stop Docker, see red.
+
+ -------------------------------------------------------------
+ PHASE 2 - Login and brands (organizations)
+ -------------------------------------------------------------
+   Tasks
+     1. Sign up and log in (password hashed with argon2)
+     2. Login kept in a secure cookie (session stored in database)
+     3. Create an organization (brand) after sign-up
+     4. User can only see their own brand's pages
+   Check: make 2 users with 2 brands; user A cannot open brand B.
+
+ -------------------------------------------------------------
+ PHASE 3 - Projects and data upload
+ -------------------------------------------------------------
+   Tasks
+     1. Create / rename / delete projects
+     2. Upload a CSV, choose the unique id column (e.g. sku)
+     3. Save rows to "records"
+     4. Show the data in a table with pages (paginated)
+     5. Re-upload = update existing ids, add new ones
+   Check: upload a CSV, see the rows, upload again with a new price,
+          see the price change.
+
+ -------------------------------------------------------------
+ PHASE 4 - First real API + tokens  (THE KEY PHASE)
+ -------------------------------------------------------------
+   (Tokens and the first API are built together, because the API
+    cannot know the brand without the token.)
+   Tasks
+     1. "Generate token" page: show once, store hash, list, revoke
+     2. Token-check middleware (steps 1-3 of Part 2.2)
+     3. One fixed endpoint, already in the Jivox contract format:
+          GET /v1/:brand/live/prices?ids=A,B,C
+          header X-Api-Key: <token>
+        Returns status / generated_at / data / errors
+        and header Cache-Control: no-store
+     4. Unknown ids go into "errors"
+   Check with curl / Postman:
+     - correct token  -> data comes back
+     - no token       -> 401
+     - wrong token    -> 401
+     - brand B token on brand A URL -> 403
+     - revoked token  -> 401
+
+ -------------------------------------------------------------
+ PHASE 5 - Connect to Jivox for real  (first end-to-end test)
+ -------------------------------------------------------------
+   Tasks
+     1. Open a public URL to our laptop (ngrok / cloudflared)
+     2. Paste our token into BrandStore Studio Real Time Agent (qa3)
+     3. Submit a contract like "Sample A" pointing to our URL
+     4. Watch our logs: did Jivox call us? what did it send?
+     5. Fix anything until the contract is "verified"
+   Check: contract verified + live price appears in chat.
+   >>> After this phase we already have a working test API. <<<
+
+ -------------------------------------------------------------
+ PHASE 6 - API builder (make it clickable, not hard-coded)
+ -------------------------------------------------------------
+   Tasks
+     1. Page to create an API: choose dataset, id field,
+        response fields, path name
+     2. Save it as an api_config
+     3. ONE generic handler reads the config and answers
+        (no new code per brand)
+     4. Preview: type ids, see the response before saving
+   Check: create 2 different APIs for 2 brands without writing code.
+
+ -------------------------------------------------------------
+ PHASE 7 - POST style + test switches  (all Jivox cases)
+ -------------------------------------------------------------
+   Tasks
+     1. Support POST with one object per row
+          { "items": [ { "sku": "SKU-1001", "cat": "shoes" } ] }
+        (Jivox "Sample B")
+     2. Choose header style per API:
+          X-Api-Key: {token}   or   Authorization: Bearer {token}
+     3. "Test mode" switches per API, to make failure cases on purpose:
+          - remove the no-store header
+          - return status "failure"
+          - return a duplicate id
+          - leave out an id
+          - wrong value type (text instead of number)
+          - answer slowly (more than 3 seconds)
+          - return HTTP 500
+     4. Request log page: see exactly what Jivox sent us
+          (headers with token hidden, ids, body, locale, location)
+   Check: each switch makes the Jivox contract fail in the expected way.
+
+ -------------------------------------------------------------
+ PHASE 8 - Docs page and playground
+ -------------------------------------------------------------
+   - Each API shows: URL, how to send the token, example request,
+     example response, and a ready-to-copy contract JSON for Jivox
+   - "Try it" button
+   - Draft / Published state
+
+ -------------------------------------------------------------
+ PHASE 9 - Put it online
+ -------------------------------------------------------------
+   - Deploy backend + database + website (Render / Railway / Fly)
+   - Real HTTPS URL, so we stop depending on the laptop tunnel
+   - Environment variables and secrets set safely
+
+ -------------------------------------------------------------
+ PHASE 10 - Grow it when needed  (pick only what we need)
+ -------------------------------------------------------------
+   - (removed: team invites and roles, see ROADMAP D7)
+   - One token per API (if not done earlier)
+   - Rate limits
+   - Usage dashboard
+   - Redis cache
+   - Background jobs for big CSV files
+   - API versions
+   - Automated tests
+
+
+---------------------------------------------------------------------
+PART 7. WHAT WE ARE NOT DOING NOW (AND WHY)
+---------------------------------------------------------------------
+
+  Redis / cache       - database is fast enough for small data
+  Background jobs     - small CSV files upload fine directly
+  Roles / invites     - removed: one account = one brand (ROADMAP D7)
+  API versions        - nobody depends on our API yet
+  "user" tokens       - Jivox says this comes later
+  Rate limits         - no real traffic yet
+  Automated tests     - your choice; we keep code easy to test later
+  Contract checking   - Jivox does the checking; we only answer right
+
+
+---------------------------------------------------------------------
+PART 8. FOLDER STRUCTURE (PLANNED)
+---------------------------------------------------------------------
+
+  api-platform/
+    docs/
+      PLAN.txt              <- this file
+    docker-compose.yml      <- PostgreSQL
+    README.md               <- how to run everything
+    backend/
+      prisma/schema.prisma  <- database tables
+      src/
+        index.ts            <- starts the server
+        app.ts              <- Express setup
+        config/env.ts       <- reads .env safely
+        db.ts               <- database connection
+        middleware/         <- login check, token check, errors
+        modules/            <- one folder per feature
+          health/
+          auth/
+          organizations/
+          projects/
+          datasets/
+          tokens/
+          realtime/         <- the /v1 APIs Jivox calls
+    frontend/
+      src/
+        pages/              <- login, dashboard, projects, tokens...
+        components/         <- buttons, tables, layout
+        lib/api.ts          <- one place to call the backend
+
+
+---------------------------------------------------------------------
+PART 9. QUESTIONS FOR YOU
+---------------------------------------------------------------------
+
+  Q1. One token per brand first, then per API later? (Part 2.5)
+  Q2. Is the URL style OK?  /v1/<brand-slug>/<api-path>
+  Q3. Is it OK that Phase 4 (tokens + first API) and Phase 5
+      (real Jivox test) come this early, before the API builder?
+  Q4. Is the "test mode" failure-switches idea (Phase 7) useful
+      for your testing?
+  Q5. Which header should the first API use:
+      X-Api-Key (raw token) or Authorization: Bearer?
+  Q6. Do you have Node 20+, Docker Desktop and Git ready?
+
+=====================================================================
+  END OF PLAN - please review, write your comments, and send back.
+=====================================================================

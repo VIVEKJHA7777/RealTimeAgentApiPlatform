@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "apis" ALTER COLUMN "design" SET DATA TYPE JSON;

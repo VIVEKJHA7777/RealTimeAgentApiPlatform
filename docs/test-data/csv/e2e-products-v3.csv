@@ -1,0 +1,4 @@
+sku,Product Name,priceUSD,in_stock,img,category
+SKU-1001,Red Runner,69.99,yes,https://cdn.example.com/p/1001.png,shoes
+SKU-1002,Blue Runner,129.00,no,https://cdn.example.com/p/1002.png,shoes
+SKU-1006,Hiking Pole,35,yes,https://cdn.example.com/p/1006.png,gear

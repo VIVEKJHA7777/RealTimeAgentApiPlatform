@@ -1,0 +1,48 @@
+# Render Blueprint (task 6.0): the whole app as ONE free web service: the backend serves the API,
+# the live /v1 endpoint AND the built frontend at https://<name>.onrender.com.
+# The database is NOT here: it's on Neon (free, doesn't expire). See docs/DEPLOY-render-neon.md.
+# Values marked "sync: false" are asked for when you create the Blueprint (never put secrets here).
+services:
+  - type: web
+    name: api-platform            # → https://api-platform.onrender.com (Render adds a suffix if taken)
+    runtime: node
+    plan: free
+    region: virginia              # keep it in the SAME region as the Neon database (us-east-1)
+    branch: main
+    # Frontend first (frontend/dist), then the backend (Prisma client + TypeScript → backend/dist).
+    # --include=dev: the build tools (TypeScript, Vite, Prisma CLI) are devDependencies, and npm
+    # skips those when NODE_ENV=production.
+    buildCommand: >-
+      cd frontend && npm ci --include=dev && npm run build &&
+      cd ../backend && npm ci --include=dev && npx prisma generate && npm run build
+    # Database changes first (only the new migrations run), then the server.
+    startCommand: cd backend && npx prisma migrate deploy && node dist/index.js
+    healthCheckPath: /api/ping
+    autoDeploy: true              # every push to main deploys
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22"
+      - key: DATABASE_URL         # Neon → Connect → the DIRECT (not "pooled") string, with ?sslmode=require
+        sync: false
+      - key: TOKEN_ENCRYPTION_KEY # a NEW one: openssl rand -base64 32 (never your local one); keep a copy safe
+        sync: false
+      - key: SIGNUP_ALLOWED_EMAILS # who may create an account, e.g. you@jivox.com or @jivox.com
+        sync: false
+      - key: TRUST_PROXY          # Render's proxy in front: req.ip = the caller
+        value: "1"
+      # PUBLIC_BASE_URL: not needed, Render's RENDER_EXTERNAL_URL is used. Set it for a custom domain.
+      # Small free server (512 MB, 0.1 CPU) + 0.5 GB Neon: smaller limits than on a laptop.
+      - key: UPLOAD_MAX_MB
+        value: "50"
+      - key: IMPORT_MAX_ROWS
+        value: "200000"
+      - key: IMPORT_CONCURRENCY
+        value: "1"
+      - key: DOWNLOAD_CONCURRENCY
+        value: "2"
+      - key: VALUE_CHECK_CONCURRENCY
+        value: "2"
+      - key: DB_POOL_MAX
+        value: "5"
