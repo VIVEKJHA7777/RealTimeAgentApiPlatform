@@ -7,7 +7,7 @@ services:
     name: api-platform            # → https://api-platform.onrender.com (Render adds a suffix if taken)
     runtime: node
     plan: free
-    region: virginia              # keep it in the SAME region as the Neon database (us-east-1)
+    region: ohio                  # the SAME region as the Neon database (AWS US East 2, Ohio)
     branch: main
     # Frontend first (frontend/dist), then the backend (Prisma client + TypeScript → backend/dist).
     # --include=dev: the build tools (TypeScript, Vite, Prisma CLI) are devDependencies, and npm
