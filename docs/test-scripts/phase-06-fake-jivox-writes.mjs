@@ -51,7 +51,8 @@ export function createWrites(schema) {
     if (Array.isArray(doc.fields)) {
       if (doc.fields[0]?.column_name !== schema.id_column) err('ID_FIRST', '$.fields[0]', `The first field must be the id column ${schema.id_column}.`, `Start fields with { "column_name": "${schema.id_column}", "at": "$.data[*].<id key>" }.`);
       doc.fields.forEach((f, i) => {
-        if (typeof f?.at !== 'string' || !/^\$\.data\[\*\]\.[^.[\]]+$/.test(f.at)) err('BAD_AT', `$.fields[${i}].at`, `at must look like $.data[*].<key>.`, 'Items are flat: one key per field.');
+        // Jivox's real rule and words (its first answer on qa3, 2026-10-12): code BAD_DOCUMENT, no fix.
+        if (typeof f?.at !== 'string' || !/^\$\.data\[\*\]\.[A-Za-z0-9_]+$/.test(f.at)) errors.push({ code: 'BAD_DOCUMENT', message: `'${f?.at}' does not match '^\\$\\.data\\[\\*\\]\\.[A-Za-z0-9_]+$'` });
       });
     } else if (doc.fields !== undefined) err('BAD_FIELDS', '$.fields', 'fields must be a list.', 'List the id first, then the bound fields.');
     return errors;

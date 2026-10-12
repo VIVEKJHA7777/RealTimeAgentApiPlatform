@@ -85,7 +85,9 @@ export async function checkAgentContract(api: Api, brandSlug: string, agentId: s
   // ── Contract ──
   const shape: string[] = [];
   if (fields[0]?.column_name !== (info?.idColumn ?? getFeedSchema(ctx.feedType).idColumn)) shape.push('the id must be the first field');
-  if (fields.some((f) => !/^\$\.data\[\*\]\.[^.[\]\s]+$/.test(f.at))) shape.push('every "at" must be $.data[*].<flat key>');
+  // Jivox's own rule for `at` (its BAD_DOCUMENT on qa3): $.data[*].<letters, numbers, _>.
+  const badKeys = fields.filter((f) => !/^\$\.data\[\*\]\.[A-Za-z0-9_]+$/.test(f.at)).map((f) => `${f.column_name} → "${f.at.replace('$.data[*].', '')}"`);
+  if (badKeys.length > 0) shape.push(`Jivox reads a key only with letters, numbers and _: rename ${badKeys.join(', ')} on the Design tab`);
   if ((String(document.service_value_format).match(/\{token\}/g) ?? []).length !== 1) shape.push('{token} must appear exactly once');
   const max = document.call_rules.max_ids_per_call;
   if (!(Number.isInteger(max) && max >= 1 && max <= 100)) shape.push('max_ids_per_call must be 1–100');

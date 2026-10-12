@@ -23,7 +23,8 @@ export const TYPE_LABELS: Record<FieldType, string> = {
 // Popover triggers and selects that sit next to <Input>s look like them.
 export const fieldControlClass =
   'flex h-8 w-full min-w-0 items-center gap-1.5 rounded-lg border border-input bg-transparent dark:bg-input/30 px-2.5 text-left text-sm outline-none transition-colors hover:bg-muted/50 focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 aria-invalid:border-destructive aria-invalid:ring-destructive/20'
-export const RESPONSE_KEY = /^[A-Za-z0-9_-]{1,64}$/
+// Letters, numbers and _ only: Jivox reads a contract's key no other way (its BAD_DOCUMENT on qa3, 2026-10-12).
+export const RESPONSE_KEY = /^[A-Za-z0-9_]{1,64}$/
 export const CONTEXT_SOURCES = [
   { value: '_meta.openai/locale', label: 'Locale', example: 'en-US', defaultKey: 'locale' },
   { value: '_meta.openai/userLocation', label: 'User location', example: 'city, region, country', defaultKey: 'location' },
@@ -73,9 +74,9 @@ export function matchColumn(jivoxName: string, columns: string[]) {
 export function suggestKey(name: string) {
   const key = name
     .normalize('NFKD')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/[^A-Za-z0-9_]+/g, '_') // "sub-category" → "sub_category" (Jivox reads no "-")
     .replace(/_+/g, '_')
-    .replace(/^[_-]+|[_-]+$/g, '')
+    .replace(/^_+|_+$/g, '')
     .slice(0, 64)
   return key || 'field'
 }

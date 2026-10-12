@@ -27,6 +27,10 @@ const failed = readSubmit({ status: 'failed', step: 'verification', evidence: { 
 eq('failed: the evidence kept whole, its problems listed', [failed.problems.length, (failed.evidence as { response: { status: number } }).response.status], [2, 401]);
 eq('  hint: a 401 → paste the token in Studio', failed.hints.map((h) => h.place), ['studio']);
 
+// ── Jivox's FIRST REAL answer (qa3, 2026-10-12): the exact shape it sent ──
+const real = readSubmit({ status: 'invalid', errors: [{ code: 'BAD_DOCUMENT', message: String.raw`'$.data[*].sub-category' does not match '^\$\.data\[\*\]\.[A-Za-z0-9_]+$'` }] });
+eq('real qa3 answer: invalid, one BAD_DOCUMENT problem (no fix from Jivox), our hint → Design tab', [real.outcome, real.problems.map((p) => [p.code, p.fix]), real.hints.map((h) => h.place)], ['invalid', [['BAD_DOCUMENT', null]], ['design']]);
+
 // ── hints ──
 const h = (code: string | null, message: string) => hintsFor([{ code, message, fix: null, path: null }]).map((x) => x.place);
 eq('by code: NOT_BOUND → agent · MANDATORY_FIELD → agent · ID_PLACEHOLDER → design · TOKEN_FORMAT → tokens', [h('NOT_BOUND', 'x'), h('MANDATORY_FIELD', 'x'), h('ID_PLACEHOLDER', 'x'), h('TOKEN_FORMAT', 'x')], [['agent'], ['agent'], ['design'], ['tokens']]);

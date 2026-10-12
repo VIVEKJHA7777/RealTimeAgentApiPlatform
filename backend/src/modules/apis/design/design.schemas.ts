@@ -2,9 +2,12 @@
 // and feed type (does the column exist? is it a Jivox field?) are in design-rules.ts.
 import { z } from 'zod';
 
-// Keys in the response items: flat, so one plain name each (P3-7 / R4).
-export const RESPONSE_KEY = /^[A-Za-z0-9_-]{1,64}$/;
-const responseKey = z.string().trim().regex(RESPONSE_KEY, 'Use 1–64 letters, numbers, _ or -');
+// Keys in the response items: flat, so one plain name each (P3-7 / R4). Letters, numbers and _ only:
+// Jivox reads a contract's `at` only as ^\$\.data\[\*\]\.[A-Za-z0-9_]+$ (its first real answer on qa3,
+// 2026-10-12: BAD_DOCUMENT for "$.data[*].sub-category"). A "-" used to be allowed here.
+export const RESPONSE_KEY = /^[A-Za-z0-9_]{1,64}$/;
+export const RESPONSE_KEY_MESSAGE = "Use 1–64 letters, numbers or _ (Jivox can't read a key with - or spaces)";
+const responseKey = z.string().trim().regex(RESPONSE_KEY, RESPONSE_KEY_MESSAGE);
 
 export const FIELD_TYPES = ['string', 'int', 'float', 'boolean', 'image'] as const;
 

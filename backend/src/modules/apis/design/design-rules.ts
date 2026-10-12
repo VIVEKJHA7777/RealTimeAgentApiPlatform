@@ -7,7 +7,7 @@
 import type { ErrorDetail } from '../../../lib/app-error.js';
 import type { FeedSchema } from '../../jivox/feed-schemas.js';
 import { convertValue } from './convert.js';
-import type { StoredDesign } from './design.schemas.js';
+import { RESPONSE_KEY, RESPONSE_KEY_MESSAGE, type StoredDesign } from './design.schemas.js';
 
 export type DesignContext = {
   feedSchema: FeedSchema; // of the API's feed type
@@ -26,6 +26,11 @@ export function checkDesign(design: StoredDesign, ctx: DesignContext) {
   // is the first one taken.
   const keys = new Map<string, string>([[design.idField.responseKey.toLowerCase(), 'the id']]);
   const usedJivox = new Map<string, number>();
+  // Keys saved before Jivox's rule was known (a "-") show up as a problem; the live API keeps
+  // answering with them until the design is saved again.
+  if (!RESPONSE_KEY.test(design.idField.responseKey)) {
+    problems.push({ field: 'idField.responseKey', message: `The id's key "${design.idField.responseKey}": ${RESPONSE_KEY_MESSAGE}` });
+  }
 
   design.fields.forEach((field, i) => {
     const at = (name: string) => `fields.${i}.${name}`;
@@ -62,7 +67,10 @@ export function checkDesign(design: StoredDesign, ctx: DesignContext) {
       });
     }
 
-    // 3. Unique response key.
+    // 3. A key Jivox can read, unique.
+    if (!RESPONSE_KEY.test(field.responseKey)) {
+      problems.push({ field: at('responseKey'), message: `${label}: the key "${field.responseKey}": ${RESPONSE_KEY_MESSAGE}` });
+    }
     const owner = keys.get(field.responseKey.toLowerCase());
     if (owner) {
       problems.push({
@@ -117,9 +125,9 @@ const TYPE_WORDS = {
 export function suggestResponseKey(column: string) {
   const key = column
     .normalize('NFKD')
-    .replace(/[^A-Za-z0-9_-]+/g, '_')
+    .replace(/[^A-Za-z0-9_]+/g, '_') // "sub-category" → "sub_category" (Jivox reads no "-")
     .replace(/_+/g, '_')
-    .replace(/^[_-]+|[_-]+$/g, '')
+    .replace(/^_+|_+$/g, '')
     .slice(0, 64);
   return key || 'id';
 }

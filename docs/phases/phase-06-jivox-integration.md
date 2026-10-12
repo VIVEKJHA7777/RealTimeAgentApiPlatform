@@ -16,7 +16,7 @@
 | 6.3 | Database: `jivox_contract_actions` (every submit / activate per agent: document, shape, design version, outcome, Jivox version, Jivox's answer, who, when) + one-at-a-time guard | Backend | ✅ |
 | 6.4 | Backend: **Submit** (fresh contract → `submit_contract`), **Versions** (`list_contracts`, live), **Activate** (`activate_contract`), **History**; write tools only to allowed Jivox hosts | Backend | ✅ |
 | 6.5 | Frontend: a **Jivox** section in each agent's panel (Submit, result explained, versions + Activate, history) + a Jivox status chip per agent in the table | Frontend | ✅ |
-| 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | ⬜ |
+| 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | 🔄 |
 | 6.7 | End-to-end + docs (the fake for every edge case; the qa3 record as proof) | Both | ⬜ |
 
 (Old plan: tunnel → replaced by the Render deploy; "connect / read agent info / sync fields" → done in Phase 5
@@ -246,3 +246,39 @@ dark: no side scroll, readable. Console: only expected 401 / 409 (plus one hot-r
 | "Submit → jivox answered…" (lower-casing the whole phrase) | only the first letter, never "Jivox" |
 | The host broke mid-word on phones next to the title | its own line under "Jivox" |
 | An amber style on the dialog's "Submit anyway" button didn't apply (the dialog's own style wins) | dropped; the warning box says it |
+
+## 6.6 Real qa3 run 🔄 (started 2026-10-12)
+
+### Jivox's first real answer (the user submitted from the live app, `category-subtitle`, before the guided run)
+
+```json
+{ "status": "invalid", "errors": [ { "code": "BAD_DOCUMENT",
+  "message": "'$.data[*].sub-category' does not match '^\\$\\.data\\[\\*\\]\\.[A-Za-z0-9_]+$'" } ] }
+```
+(shape as shown by our result card; the raw answer is kept in `jivox_contract_actions.answer`.) What it tells us:
+- the status word is `invalid` and errors are `{ code, message }` with **no `fix`**: our loose reader read it right
+- **Jivox reads a key in `at` only as `[A-Za-z0-9_]+`**. Our design allowed and even suggested `-`
+  (column `sub-category` → key `sub-category`); the checklist and the fake didn't know the rule
+
+**Fix (2026-10-12):**
+
+| Part | What | Where |
+|---|---|---|
+| Rule | response keys: letters, numbers, `_` only ("Jivox can't read a key with - or spaces"); save + preview refuse a new one; a design saved earlier with one shows a **problem** on the Design tab (and **publish is refused** until it's renamed; an API already published keeps answering with the old key) | `design.schemas.ts` (`RESPONSE_KEY`, `RESPONSE_KEY_MESSAGE`), `design-rules.ts` |
+| Suggestions | `-` → `_` (backend `suggestResponseKey`, frontend `suggestKey`) | `design-rules.ts`, `frontend/src/lib/design.ts` |
+| Checklist | "Follows contract/1" uses Jivox's exact `at` rule and **names the key** ("rename sub_category → \"sub-category\" on the Design tab"), fix: Design tab | `agents/contract-check.ts` |
+| Fake + hint | the fake answers `BAD_DOCUMENT` with Jivox's words; our hint for "… does not match" on a `$.data` path → Design tab | `phase-06-fake-jivox-writes.mjs`, `agents/jivox-answers.ts` |
+
+**Tests:** `phase-06-task-6.6-hyphen-keys.sh` **15** (new key refused on save / preview / id key; spaces, dots,
+accents refused; the live case: published, then the design as saved before the rule → Design tab problem, `/v1`
+still answers with the old key, checklist ✗ naming it, submit anyway → BAD_DOCUMENT with Jivox's exact words + hint
+Design; republish refused until renamed; renamed → publish OK, `/v1` answers `sub_category`, ✓, verified; suggestions
+`sub-category` → `sub_category` both sides). Answers lib **26** (+ the real answer). Regression: 3.2 69 · 3.4 51 ·
+3.5 41 · 3.7 26 · 3.8 33 · 4.9 52 · 5.3 30 · 5.4 29 · 5.7 42 · 6.2 32 · 6.4 40.
+
+### Reported by the user (open)
+- Jivox's log: `[realtime] Agent 2 call missing Cache-Control: no-store` (07:20:42 UTC). Our `/v1` sends `no-store` on
+  every answer (one helper) and the live server does (HTTP/1.1 + HTTP/2, through Cloudflare, `cf-cache-status:
+  DYNAMIC`). Next: did the call reach us (Recent calls / Render log), Render asleep or restarting, or which "Agent 2"?
+- "The Jivox section needed a reload": not reproduced (agent added with a key, or a key added by Edit, both fine);
+  most likely a tab opened before the 6.5 deploy. Proposed: an "app updated → Reload" bar.

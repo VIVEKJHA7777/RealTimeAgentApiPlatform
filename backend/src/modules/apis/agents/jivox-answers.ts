@@ -71,6 +71,8 @@ const BY_CODE: Record<string, Hint> = {
   BAD_BASE_URL: { text: 'The base URL: set PUBLIC_BASE_URL to the public https address.', place: 'settings' },
 };
 const BY_WORDS: [RegExp, Hint][] = [
+  // Jivox's BAD_DOCUMENT for a key it can't read (qa3, 2026-10-12): "'$.data[*].sub-category' does not match '^\$\.data…'"
+  [/\$\.data\[\*\]\.\S*' does not match/, { text: 'A response key Jivox can\'t read (only letters, numbers and _): rename it on the Design tab.', place: 'design' }],
   [/\b401\b|unauthori[sz]ed|missing token|token/i, { text: 'Our API refused Jivox\'s token: paste this agent\'s token in Studio (Real-time data → the agent → ACCESS KEYS → Agent access token).', place: 'studio' }],
   [/\b404\b|not published|not found/i, { text: 'Our API answered 404: publish the API (Overview) and check its address.', place: 'publish' }],
   [/expected (float|int|boolean|string|image)|type/i, { text: 'A value isn\'t of the type Jivox expects: change the type (or its column) on the Design tab.', place: 'design' }],
