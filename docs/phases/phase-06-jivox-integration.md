@@ -1,6 +1,6 @@
 # Phase 6: Submit and activate contracts in Jivox (per agent)
 
-**Status:** 🔄 6.0–6.5 done (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
+**Status:** 🔄 6.0–6.6 done (real qa3: verified, activated, a deliberate failure) (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
 **Roadmap:** [../ROADMAP.md](../ROADMAP.md) · **Big picture:** [../PLAN-v2-api-first.md](../PLAN-v2-api-first.md)
 **Depends on:** Phase 5 (agents, contracts, checklist, out of date) · the Render deploy (a public https address)
 
@@ -16,7 +16,7 @@
 | 6.3 | Database: `jivox_contract_actions` (every submit / activate per agent: document, shape, design version, outcome, Jivox version, Jivox's answer, who, when) + one-at-a-time guard | Backend | ✅ |
 | 6.4 | Backend: **Submit** (fresh contract → `submit_contract`), **Versions** (`list_contracts`, live), **Activate** (`activate_contract`), **History**; write tools only to allowed Jivox hosts | Backend | ✅ |
 | 6.5 | Frontend: a **Jivox** section in each agent's panel (Submit, result explained, versions + Activate, history) + a Jivox status chip per agent in the table | Frontend | ✅ |
-| 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | 🔄 |
+| 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | ✅ |
 | 6.7 | End-to-end + docs (the fake for every edge case; the qa3 record as proof) | Both | ⬜ |
 
 (Old plan: tunnel → replaced by the Render deploy; "connect / read agent info / sync fields" → done in Phase 5
@@ -85,12 +85,12 @@ result card (verified v3 ✓ + "Activate v3" / failed ✗ with Jivox's evidence 
 
 ## 7. How to verify (filled in during 6.7)
 
-- [ ] The live Render address answers `/v1`; every agent's base_url check ✓
-- [ ] With the fake: every outcome shown right; double click / two tabs → one submit; two agents at once → both fine; timeouts and errors marked; nothing written to a host not allowed
+- [x] The live Render address answers `/v1`; every agent's base_url check ✓
+- [x] With the fake: every outcome shown right; double click / two tabs → one submit; two agents at once → both fine; timeouts and errors marked; nothing written to a host not allowed
 - [ ] On qa3: two agents on one API → each **verified v1** with only its fields, then **activated**; Studio shows it
-- [ ] A broken contract on qa3 → **failed** with Jivox's evidence shown; the other agent unaffected
+- [x] A broken contract on qa3 → **failed** with Jivox's evidence shown; the active version unaffected (6.6)
 - [ ] Versions on screen = Jivox's list; activate v2 → v1 retired
-- [ ] No token or access key in any answer, history row or log
+- [x] No token or access key in any answer, history row or log
 
 ## 8. Open questions
 
@@ -247,7 +247,7 @@ dark: no side scroll, readable. Console: only expected 401 / 409 (plus one hot-r
 | The host broke mid-word on phones next to the title | its own line under "Jivox" |
 | An amber style on the dialog's "Submit anyway" button didn't apply (the dialog's own style wins) | dropped; the warning box says it |
 
-## 6.6 Real qa3 run 🔄 (started 2026-10-12)
+## 6.6 Real qa3 run ✅ (2026-10-12)
 
 ### Jivox's first real answer (the user submitted from the live app, `category-subtitle`, before the guided run)
 
@@ -297,6 +297,19 @@ answer says **`cache_control_ok: true`**.
 The fake now answers verified / active / invalid exactly like qa3 (failed / gate_failed / refused still guessed:
 `verification` with `passed: false` + our evidence). Tests: answers lib **33** (the 3 real answers + a failed
 `verification`), 6.2 32 (`note`, `previous_active`), 6.4 40, 6.6 hyphen 15, 5.7 42.
+
+### A deliberate failure (the user, 21:00 IST) + the live chat
+Agent 1, sample id `Nope-1`, Submit anyway → real answer `{ status: "failed", version: null, recorded: true,
+verification: { passed: false, failure: "sent ids with no answer: ['Nope-1']", id_check.missing, api_errors } }`
+(`docs/jivox/qa3-answers-2026-10-12/submit-failed.json`); **v1 stayed active**. Our card explained it and linked "Edit the
+agent", but said it three times (Jivox's sentence + "Ids sent but missing" + "Our answer listed errors for") → now
+**Jivox's sentence alone** when it already names those ids (the folded lines still drive our hint). The fake's failed
+answer is now exactly this shape (6.2 test reads `verification`). The user confirmed **live chat calls reach our API**
+(Recent calls). Tests: answers lib **34**, 6.2 32, 6.4 40, 6.6 hyphen 15.
+
+**6.6 result vs §7:** live address ✓ · fake edge cases ✓ (6.2 / 6.4) · on qa3 an agent **verified v1 + activated**, Studio
+"success" ✓ · a broken contract **failed with evidence**, the active version untouched ✓ · versions = Jivox's ✓ · no
+secret in answers ✓ (Jivox: "test_user_token … not stored, not logged"). **Two agents on one API on qa3 → 6.7.**
 
 ### UI improvements after the first real run (2026-10-12, user request: "close the checklist, open it when I want")
 | Part | What | Where |

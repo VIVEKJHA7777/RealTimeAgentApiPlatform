@@ -11,8 +11,8 @@
 // ANSWER SHAPES: verified + active + invalid as Jivox sent them on qa3 (2026-10-12,
 // docs/jivox/qa3-answers-2026-10-12/): { note, status: 'verified', version, contract, recorded, verification }
 // · { status: 'active', version, contract, created_at, updated_at, verification, previous_active }
-// · { status: 'invalid', errors: [{ code, message }] }. Still guessed: gate_failed, failed (+ our
-// evidence next to `verification`), refused.
+// · { status: 'invalid', errors: [{ code, message }] } · { status: 'failed', version: null, recorded, verification }.
+// Still guessed: gate_failed, refused (an activation that fails its re-check).
 // Test-only control (POST /__control, same Bearer key): { path, studioToken?, submit?, activate?, reset? }
 //   submit / activate: '' (real behaviour) | 'tool-error' | 'http500' | 'slow' (5 s, then real) | 'hang' (90 s)
 //   GET /__state?path=… → the agent's versions + every call, for tests.
@@ -195,7 +195,7 @@ export function createWrites(schema) {
       if (gated.length) return record({ status: 'gate_failed', errors: gated, message: 'The contract does not fit this agent. Fix each error and submit again.' });
       const v = await verify(doc, a.studioToken);
       // failed: the real shape is not known yet (guess: verification + our evidence); verified: as qa3 sent it.
-      if (!v.ok) return record({ status: 'failed', step: 'verification', note: 'The live verification call failed. Read the evidence, fix the API or the document, and submit again.', verification: v.verification, evidence: v.evidence });
+      if (!v.ok) return record({ status: 'failed', version: null, recorded: true, verification: v.verification }); // as qa3 sent it
       const version = a.next++;
       a.versions.push({ version, status: 'verified', document: doc, created_at: new Date().toISOString() });
       return record({ note: `Call activate_contract(version=${version}) to make it live.`, status: 'verified', version, contract: doc, recorded: true, verification: v.verification });
@@ -225,7 +225,7 @@ export function createWrites(schema) {
       const gated = gates(target.document, bound);
       if (gated.length) return record({ status: 'refused', reason: 'gate_failed', errors: gated, message: 'The version no longer fits the agent.' });
       const v = await verify(target.document, a.studioToken);
-      if (!v.ok) return record({ status: 'refused', reason: 'verification_failed', verification: v.verification, evidence: v.evidence, message: 'The live verification call failed again; nothing changed.' });
+      if (!v.ok) return record({ status: 'refused', reason: 'verification_failed', verification: v.verification, message: 'The live verification call failed again; nothing changed.' }); // guessed
       const previous = a.versions.find((x) => x.status === 'active');
       if (previous) previous.status = 'retired';
       target.status = 'active';

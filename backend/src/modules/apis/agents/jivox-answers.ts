@@ -11,7 +11,8 @@
 // Hints add OUR link to the place to fix a problem we recognise (P6-7); Jivox's words come first.
 import type { FixPlace } from './contract-check.js';
 
-export type JivoxProblem = { code: string | null; message: string; fix: string | null; path: string | null };
+// `hidden`: lines folded into Jivox's own sentence (not shown, but still used for our hints).
+export type JivoxProblem = { code: string | null; message: string; fix: string | null; path: string | null; hidden?: JivoxProblem[] };
 export type Hint = { text: string; place: FixPlace };
 export type SubmitReading = {
   outcome: 'verified' | 'failed' | 'invalid' | 'gate_failed' | 'unknown';
@@ -83,8 +84,13 @@ function verificationProblems(value: unknown): JivoxProblem[] {
     }
   }
   const failure = typeof v.failure === 'string' ? v.failure : v.failure ? JSON.stringify(v.failure) : null;
-  if (failure && !out.some((p) => p.message.includes(failure))) out.unshift({ code: 'VERIFICATION', message: failure, fix: null, path: null });
-  return out;
+  if (!failure || out.some((p) => p.message.includes(failure))) return out;
+  // Jivox's own sentence first; our lines only when they add something it doesn't already say
+  // (real qa3: "sent ids with no answer: ['Nope-1']" made "Ids sent but missing: Nope-1" and "Our answer
+  // listed errors for: Nope-1" repeat it). Hints still come from every line (see hintsOf).
+  const said = (p: JivoxProblem) => (p.code === 'IDS_MISSING' || p.code === 'API_ERRORS') && (p.message.match(/: (.*?)(?: \(appears|\.$)/)?.[1] ?? '').split(', ').every((id) => id && failure.includes(id));
+  const kept = out.filter((p) => !said(p));
+  return [{ code: 'VERIFICATION', message: failure, fix: null, path: null, hidden: out.filter(said) } as JivoxProblem, ...kept];
 }
 
 // OUR link for problems we recognise (by code first, then by words). Each place at most once.
@@ -112,12 +118,13 @@ const BY_WORDS: [RegExp, Hint][] = [
   [/\b401\b|unauthori[sz]ed|missing token|token/i, { text: 'Our API refused Jivox\'s token: paste this agent\'s token in Studio (Real-time data → the agent → ACCESS KEYS → Agent access token).', place: 'studio' }],
   [/\b404\b|not published|not found/i, { text: 'Our API answered 404: publish the API (Overview) and check its address.', place: 'publish' }],
   [/expected (float|int|boolean|string|image)|type/i, { text: 'A value isn\'t of the type Jivox expects: change the type (or its column) on the Design tab.', place: 'design' }],
-  [/appears 0 times|not found once|missing id|missing from the answer|sample/i, { text: 'An id Jivox sent got no answer: use sample ids that exist in your data (Edit the agent), and check the id key.', place: 'agent' }],
+  [/appears 0 times|not found once|missing id|missing from the answer|ids with no answer|sample/i, { text: 'An id Jivox sent got no answer: use sample ids that exist in your data (Edit the agent), and check the id key.', place: 'agent' }],
   [/no answer within|timed? ?out|timeout/i, { text: 'Our API answered too slowly for Jivox (3 s): check the live server is awake (the pinger) and not overloaded.', place: 'settings' }],
   [/could not reach|ECONN|ENOTFOUND|reach/i, { text: 'Jivox couldn\'t reach our API: check the public address (Render) is up.', place: 'settings' }],
   [/no-store|cache-control/i, { text: 'The answer lacked Cache-Control: no-store (our API always sends it: check a proxy in between).', place: 'settings' }],
 ];
 export function hintsFor(problems: JivoxProblem[]): Hint[] {
+  problems = problems.flatMap((p) => [p, ...(p.hidden ?? [])]);
   // When Jivox's call got a non-2xx status, the other problems (no ids, wrong status…) only follow
   // from it: point at that one cause, not at sample ids.
   const http = problems.find((p) => { const m = /\bHTTP (\d{3})\b/.exec(p.message); return m !== null && !m[1].startsWith('2'); });
@@ -130,6 +137,8 @@ export function hintsFor(problems: JivoxProblem[]): Hint[] {
   }
   return out;
 }
+
+const shown = (problems: JivoxProblem[]) => problems.map(({ hidden: _hidden, ...p }) => p);
 
 export function readSubmit(answer: unknown): SubmitReading {
   const a = obj(answer);
@@ -145,7 +154,7 @@ export function readSubmit(answer: unknown): SubmitReading {
   const problems = problemsOf(a);
   // "verified" without a version number is not something we can act on: keep it as unknown.
   const final = outcome === 'verified' && version === null ? 'unknown' : outcome;
-  return { outcome: final, jivoxStatus: status, version: final === 'verified' ? version : null, message: str(a.message) ?? str(a.note), problems, evidence: a.evidence ?? a.verification ?? null, hints: hintsFor(problems) };
+  return { outcome: final, jivoxStatus: status, version: final === 'verified' ? version : null, message: str(a.message) ?? str(a.note), problems: shown(problems), evidence: a.evidence ?? a.verification ?? null, hints: hintsFor(problems) };
 }
 
 export function readActivate(answer: unknown, asked: number): ActivateReading {
@@ -165,7 +174,7 @@ export function readActivate(answer: unknown, asked: number): ActivateReading {
     version: int(a.version) ?? asked,
     retired: int(a.retired) ?? int(a.previous_active) ?? int(obj(a.previous_active).version) ?? int(a.previous_version) ?? int(obj(a.retired).version),
     message: str(a.message) ?? str(a.note),
-    problems,
+    problems: shown(problems),
     evidence: a.evidence ?? a.verification ?? null,
     hints: hintsFor(problems),
   };

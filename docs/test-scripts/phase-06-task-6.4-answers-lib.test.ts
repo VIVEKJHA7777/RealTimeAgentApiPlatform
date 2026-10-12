@@ -39,6 +39,8 @@ eq('real verified: v1, Jivox\'s `note` is the message, `verification` is the evi
 const ra = readActivate(real2('activate-active.json'), 1);
 eq('real active: activated v1, previous_active null → nothing retired', [ra.outcome, ra.version, ra.retired, ra.problems.length], ['activated', 1, null, 0]);
 eq('previous_active as a number / an object → retired', [readActivate({ status: 'active', version: 2, previous_active: 1 }, 2).retired, readActivate({ status: 'active', version: 2, previous_active: { version: 1 } }, 2).retired], [1, 1]);
+const rf = readSubmit(real2('submit-failed.json'));
+eq('real FAILED (sample id Nope-1): failed, no version, ONE line = Jivox\'s sentence (the repeats folded in), hint → sample ids', [rf.outcome, rf.version, rf.problems.map((p) => [p.code, p.message]), rf.hints.map((h) => h.place), 'hidden' in rf.problems[0]], ['failed', null, [['VERIFICATION', "sent ids with no answer: ['Nope-1']"]], ['agent'], false]);
 const vf = readSubmit({ status: 'failed', verification: { passed: false, failure: 'verification failed', http_status: 200, status_ok: true, cache_control_ok: false, id_check: { missing: ['2'], duplicates: [], unexpected: ['9'], without_id: 1 }, api_errors: [{ error_id: '2' }], fields: [{ column_name: 'current_price', pass: false, failure_reason: '"" is not a float' }, { column_name: 'sub_title', pass: true }] } });
 eq('a failed `verification` → one problem per thing that didn\'t pass', vf.problems.map((p) => p.code), ['VERIFICATION', 'CACHE_CONTROL', 'IDS_MISSING', 'IDS_UNEXPECTED', 'ITEMS_WITHOUT_ID', 'API_ERRORS', 'FIELD']);
 eq('  …with our hints (no-store → settings, missing ids → agent, a field type → design)', vf.hints.map((h) => h.place).sort(), ['agent', 'design', 'settings']);

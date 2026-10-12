@@ -61,8 +61,8 @@ doc good1 $A1
 
 echo "1. Submit before the token is in Studio → failed, with evidence"
 OUT=$(mcp $A1P submit_contract $T/good1.json)
-check "failed at the verification step: HTTP 401 from our API" "failed verification yes" "$(r 'o.result.status' "$OUT") $(r 'o.result.step' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("HTTP 401"))?"yes":"no"' "$OUT")"
-check "  evidence = the request Jivox sent (our /v1 URL with the sample ids) + our answer" "yes 401" "$(r 'o.result.evidence.request.url.includes("/v1/'$S'/'$P'?ids=SKU-1001%2CSKU-1002")?"yes":"no"' "$OUT") $(r 'o.result.evidence.response.status' "$OUT")"
+check "failed (like qa3: version null, recorded): our API answered 401" "failed null true 401 false" "$(r 'o.result.status' "$OUT") $(r 'JSON.stringify(o.result.version)' "$OUT") $(r 'o.result.recorded' "$OUT") $(r 'o.result.verification.http_status' "$OUT") $(r 'o.result.verification.passed' "$OUT")"
+check "  verification = our /v1 URL, the sample ids sent, none echoed" "yes SKU-1001,SKU-1002 0" "$(r 'o.result.verification.url.endsWith("/v1/'$S'/'$P'")?"yes":"no"' "$OUT") $(r 'o.result.verification.sent_ids.join()' "$OUT") $(r 'o.result.verification.echoed_ids.length' "$OUT")"
 
 echo "2. Token pasted in Studio → verified; every submit is a NEW version"
 control $A1P "{\"studioToken\":\"$TA\"}"
@@ -94,11 +94,11 @@ check "  failed / invalid submits used no version number: the next good one is v
 
 echo "5. The verification judges the answer like Jivox"
 doc wrongtype $A1 'd.fields[1].type="float"'
-check "a string field declared float → failed, naming the field, id and value" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/wrongtype.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>/sub_title at .* for id SKU-1001 is "Red Runner": expected float/.test(p))?"yes":"no"' "$OUT"))"
+check "a string field declared float → failed, naming the field, id and value" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/wrongtype.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.verification.fields.some(f=>!f.pass&&/sub_title at .* for id SKU-1001 is "Red Runner": expected float/.test(f.failure_reason))?"yes":"no"' "$OUT"))"
 doc wrongid $A1 'd.fields[0].at="$.data[*].sku"'
-check "the id at the wrong key → 'id SKU-1001 appears 0 times'" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/wrongid.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("id SKU-1001 appears 0 times"))?"yes":"no"' "$OUT"))"
+check "the id at the wrong key → 'id SKU-1001 appears 0 times'" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/wrongid.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.verification.id_check.missing.includes("SKU-1001")?"yes":"no"' "$OUT"))"
 doc unknownid $A1 'd.sample_request.ids="SKU-1001,SKU-9999"'
-check "a sample id our data doesn't have → failed (it's in errors[], not data)" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/unknownid.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("id SKU-9999 appears 0 times"))?"yes":"no"' "$OUT"))"
+check "a sample id our data doesn't have → failed (it's in errors[], not data)" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/unknownid.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.verification.id_check.missing.includes("SKU-9999")?"yes":"no"' "$OUT"))"
 doc msw $A2 ''
 control $A2P "{\"studioToken\":\"$TM\"}"
 check "msw (current_price + sub_title, its own token): verified v1 (SKU-1001/1002 have prices)" "verified 1" "$(OUT=$(mcp $A2P submit_contract $T/msw.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT"))"
@@ -107,15 +107,15 @@ check "a field key missing from every item falls back to its default → still v
 
 echo "6. Our API changes under a verified version"
 req a POST "apis/$P/unpublish"
-check "unpublished → submit fails (HTTP 404 from /v1)" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/good1.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("HTTP 404"))?"yes":"no"' "$OUT"))"
+check "unpublished → submit fails (HTTP 404 from /v1)" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/good1.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.verification.http_status===404?"yes":"no"' "$OUT"))"
 check "  activate a verified version now → refused (the live call is re-run), nothing changed" "refused verification_failed 1" "$(OUT=$(act $A1P 3); echo $(r 'o.result.status' "$OUT") $(r 'o.result.reason' "$OUT")) $(r 'o.result.active_version' "$(mcp $A1P list_contracts)")"
 req a POST "apis/$P/publish"
 check "  published again → activate 3 works; v1 retired" "active 3 1" "$(OUT=$(act $A1P 3); echo $(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'o.result.previous_active' "$OUT"))"
 WRONG="rtk_wrong_token_$(openssl rand -hex 16)"
 control $A1P "{\"studioToken\":\"$WRONG\"}"
 OUT=$(mcp $A1P submit_contract $T/good1.json)
-check "the wrong token in Studio → failed 401 (that's how a token mix-up shows)" "failed yes" "$(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("HTTP 401"))?"yes":"no"' "$OUT")"
-check "  the evidence names the header, the token is masked (never echoed)" "yes 0" "$(r 'o.result.evidence.request.headers.includes("X-Api-Key: [token]")?"yes":"no"' "$OUT") $(echo "$OUT" | grep -cF -e "${WRONG:4}")"
+check "the wrong token in Studio → failed 401 (that's how a token mix-up shows)" "failed 401" "$(r 'o.result.status' "$OUT") $(r 'o.result.verification.http_status' "$OUT")"
+check "  the token is never echoed in the answer" "0" "$(echo "$OUT" | grep -cF -e "${WRONG:4}")"
 control $A1P "{\"studioToken\":\"$TA\"}"
 
 echo "7. Agents are independent; forced failures; who may call"
