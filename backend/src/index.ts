@@ -4,6 +4,7 @@ import { createApp } from './app.js';
 import { logger } from './lib/logger.js';
 import { prisma } from './lib/prisma.js';
 import { pgPool } from './lib/pg-pool.js';
+import { interruptRunningOnBoot } from './modules/apis/agents/jivox-actions.js';
 import { recoverImports } from './modules/data-sources/import/import-runner.js';
 import { saveRecentCallsNow } from './modules/v1/recent-calls.js';
 
@@ -11,6 +12,9 @@ const app = createApp();
 
 // Before accepting requests: clean up imports cut off by the last stop/crash.
 await recoverImports();
+// …and Jivox submits / activations that were waiting for Jivox when it stopped (task 6.3).
+const interrupted = await interruptRunningOnBoot();
+if (interrupted > 0) logger.warn({ interrupted }, 'Marked Jivox actions cut off by the last stop as interrupted');
 
 const server = app.listen(env.PORT, () => {
   logger.info(`Server listening on http://localhost:${env.PORT} (${env.NODE_ENV})`);

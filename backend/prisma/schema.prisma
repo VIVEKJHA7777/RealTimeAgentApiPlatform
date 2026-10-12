@@ -24,6 +24,7 @@ model User {
 
   sessions      Session[]
   organizations Organization[]
+  jivoxActions  JivoxContractAction[]
 
   @@map("users")
 }
@@ -310,11 +311,42 @@ model JivoxAgent {
   createdAt          DateTime  @default(now()) @map("created_at") @db.Timestamptz(3)
   updatedAt          DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
-  api   Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  api     Api                   @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  actions JivoxContractAction[]
   // NoAction: tokens are only ever deleted together with their API (which deletes its agents in
   // the same statement); revoked tokens stay as rows. Checked at the end of the statement.
   token ApiToken? @relation(fields: [tokenId, apiId], references: [id, apiId], onDelete: NoAction)
 
   @@index([apiId, createdAt]) // the API's agent list, oldest first
   @@map("jivox_agents")
+}
+
+// Every Submit / Activate sent to Jivox for an agent (task 6.3): what was sent, where, by whom,
+// and what Jivox answered. Jivox stays the source of truth for versions; this is OUR record.
+// One `running` row per agent at most (hand-written partial unique index): a double click, two tabs
+// or two people get 409 JIVOX_BUSY. A running row left by a restart is marked `interrupted`.
+model JivoxContractAction {
+  id            String    @id @default(cuid())
+  agentId       String    @map("agent_id")
+  kind          String // submit | activate
+  state         String    @default("running") // running → done (Jivox answered) | error (it didn't)
+  outcome       String? // see the CHECK in the migration (verified, failed, activated, refused, timeout…)
+  jivoxStatus   String?   @map("jivox_status") // Jivox's own word for it, as sent (≤ 50 chars)
+  version       Int? // activate: the target from the start; submit: the new version when verified
+  mcpHost       String    @map("mcp_host") // where it went (the dialog names it too)
+  designVersion Int?      @map("design_version")
+  document      Json? // submit: the contract exactly as sent (≤ 256 KB)
+  // submit "anyway": the checklist's ✗ at the time (empty = all ✓)
+  failedChecks  String[]  @default([]) @map("failed_checks")
+  answer        Json? // Jivox's answer, scrubbed (tokens, the access key) and capped at 64 KB
+  errorMessage  String?   @map("error_message") // when Jivox didn't answer (≤ 1000 chars)
+  startedById   String?   @map("started_by_id")
+  startedAt     DateTime  @default(now()) @map("started_at") @db.Timestamptz(3)
+  finishedAt    DateTime? @map("finished_at") @db.Timestamptz(3)
+
+  agent     JivoxAgent @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  startedBy User?      @relation(fields: [startedById], references: [id], onDelete: SetNull)
+
+  @@index([agentId, startedAt(sort: Desc)]) // an agent's history, newest first
+  @@map("jivox_contract_actions")
 }

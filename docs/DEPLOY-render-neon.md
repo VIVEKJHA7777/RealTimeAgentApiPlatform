@@ -16,13 +16,13 @@ UptimeRobot ──every 5 min──► /api/ping (keeps Render awake; doesn't to
 - Free limits to know: Render free = 512 MB RAM, 0.1 CPU, 750 hours / month (one always-on service), sleeps
   after 15 min without traffic (the pinger in step 6 prevents that). Neon free = 0.5 GB storage, pauses after 5 min
   (wakes in under a second). Keep big tests (5 lakh rows) on your Mac; uploads here are limited to 50 MB / 200 000 rows.
-- Pick ONE region for both. `render.yaml` says `virginia` (US East); in Neon pick **AWS US East (N. Virginia)**. If
-  Jivox's qa3 servers are elsewhere (ask them), use the closest region for both and change `region:` in `render.yaml`.
+- ONE region for both: the Neon project is in **AWS US East 2 (Ohio)**, so `render.yaml` says `region: ohio`.
+  (Render's regions: oregon, ohio, virginia, frankfurt, singapore; change both if Jivox's qa3 is far from Ohio.)
 
 ## 1. Neon: the database (5 min)
 
-1. Sign up at **neon.com** (GitHub login is fine) → **New project**: name `api-platform`, newest Postgres
-   version offered, region as above.
+1. Sign up at **neon.com** (GitHub login is fine) → **New project** (done 2026-10-12: `RealTimeAgent`, AWS US East 2
+   (Ohio), branch `production`). Any recent Postgres version works (no 18-only features are used).
 2. Project dashboard → **Connect** → turn **Connection pooling OFF** (we want the direct address) → copy the
    connection string. It looks like
    `postgresql://neondb_owner:…@ep-xxxx.us-east-1.aws.neon.tech/neondb?sslmode=require`.

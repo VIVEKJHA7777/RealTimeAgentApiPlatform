@@ -1,7 +1,7 @@
 # HANDOFF: read this first in a new session
 
 > Single file that tells a new session (or a new person) everything needed to continue.
-> Last updated: **2026-10-12**, **Phase 5 done**; **6.0 deploy prep done** (Render + Neon free: one address, sign-up allowlist, attempt limit, `/api/ping`, `render.yaml`, guide `docs/DEPLOY-render-neon.md`; the user deploys next). Then Phase 6 plan review (submit / activate per agent). Phase 5 summary: `phases/phase-05-contract-generator.md` §18.
+> Last updated: **2026-10-12**, **Phase 5 done**; **Phase 6 in progress**: 6.0 deploy prep, **6.1 LIVE** at `https://api-platform-phnn.onrender.com` (Render + Neon; Render deploys `~/Documents/api-platform` from the user's private GitHub repo `VIVEKJHA7777/RealTimeAgentApiPlatform` when THEY push), 6.2 fake Jivox writes (submit / list / activate), 6.3 `jivox_contract_actions` (+ `agents/jivox-actions.ts`: one running action per agent, scrubbed answers, start-up cleanup). Next: 6.4 Submit / Versions / Activate endpoints. The live deploy keeps `SIGNUP_ALLOWED_EMAILS=*` by the user's choice. Plan + user choices (Submit anyway allowed; writes to any https host) in `phases/phase-06-jivox-integration.md`. Phase 5 summary: `phases/phase-05-contract-generator.md` §18.
 > Details live in: [ROADMAP.md](ROADMAP.md) (scope, decisions, change log) · [PLAN-v2-api-first.md](PLAN-v2-api-first.md)
 > (product design) · [ARCHITECTURE.md](ARCHITECTURE.md) (code rules) · [phases/](phases/) (one doc per phase, with
 > commands, files, test results per task).
@@ -154,6 +154,8 @@ Lint rule: component files export only components (helpers live in `lib/`).
 | `phase-05-task-5.4-checklist.sh` | 29 (own fake MCP on `FAKE_PORT` 4793) · `…-checklist-lib.test.ts` 4 |
 | `phase-05-task-5.5-edit-scenarios.sh` | 31 (two agents; every API / token / agent change; own fake MCP on 4794) · `…-agents-lib.test.ts` 20 (`cd frontend`) |
 | `phase-05-task-5.6-design-vs-agents.sh` | 62 (save guard, out of date, validation + DB, races, 20 agents, 5 lakh rows; own fake MCP on 4796; `SKIP_BIG=1` skips the 500k part, ~25 s with it) · `…-shape-lib.test.ts` 33 (`cd backend`) |
+| `phase-06-task-6.3-actions-db.test.mts` | 43 (`cd backend && npx tsx …`; rules rolled back, library rows deleted; marks EVERY running action interrupted, like a restart) |
+| `phase-06-task-6.2-fake-writes.sh` | 32 (the fake's submit / list / activate against our real /v1; own fake on `FAKE_PORT` 4801; `phase-06-mcp-call.mjs` = one MCP tool call, key from `MCP_KEY`) |
 | `phase-06-task-6.0-deploy.sh` | 19 against a PRODUCTION server (`BASE=…`; a build on :4300 or the Render address; `SKIP_LIMIT=1` → 15) · `…-deploy-lib.test.ts` 10 (`cd backend`) |
 | `phase-05-task-5.7-end-to-end.sh` | 43 with `LOG_FILE` (42 without); the whole Phase 5 journey, two own fake MCP servers on `FAKE_PORT` 4798 + 4799; `KEEP=1` keeps the account |
 | (5.3 / 5.4 / 5.5 scripts) | their `save` helper confirms `AGENT_FIELDS_DROPPED` automatically (`confirm_drops`) since 5.6 |
