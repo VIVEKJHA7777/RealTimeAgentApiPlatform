@@ -8,6 +8,9 @@ import type {
   LogDetail,
   LogFilters,
   LogsPage,
+  SetSwitchInput,
+  SwitchesState,
+  SwitchKind,
   DesignInput,
   DesignPreview,
   DesignState,
@@ -327,6 +330,16 @@ export const logsApi = {
   },
   get: (brandSlug: string, apiSlug: string, logId: string) => apiFetch<LogDetail>(`${apiPath(brandSlug, apiSlug)}/logs/${encodeURIComponent(logId)}`),
   clear: (brandSlug: string, apiSlug: string) => apiFetch<{ cleared: number; clearedAt: string }>(`${apiPath(brandSlug, apiSlug)}/logs`, { method: 'DELETE' }),
+}
+
+// ---------- Test switches (Phase 7, task 7.4) ----------
+export const switchesApi = {
+  list: (brandSlug: string, apiSlug: string) => apiFetch<SwitchesState>(`${apiPath(brandSlug, apiSlug)}/switches`),
+  // on, or changed (the time counts from now) · 400 SWITCH_INVALID names the field
+  set: (brandSlug: string, apiSlug: string, kind: SwitchKind, input: SetSwitchInput) =>
+    apiFetch<SwitchesState>(`${apiPath(brandSlug, apiSlug)}/switches/${kind}`, { method: 'PUT', body: input }),
+  off: (brandSlug: string, apiSlug: string, kind?: SwitchKind) =>
+    apiFetch<SwitchesState>(`${apiPath(brandSlug, apiSlug)}/switches${kind ? `/${kind}` : ''}`, { method: 'DELETE' }),
 }
 
 export const jivoxApi = {

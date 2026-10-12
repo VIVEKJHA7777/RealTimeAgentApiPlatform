@@ -15,7 +15,7 @@
 | 7.3 | Logs API: list (filters: status, token / agent, switched or not, contains id, time) + one entry in full + "Copy as curl" (`<your token>`) | Backend | ✅ |
 | 7.4 | Switches: storage, runtime effects inside `/v1`, scope (whole API or one token = one agent), auto-expiry, audit | Backend | ✅ |
 | 7.5 | Frontend: **Logs tab** (live list, filters, detail drawer); the Test tab's Recent calls read from the same log | Frontend | ✅ |
-| 7.6 | Frontend: **Test switches** panel (on the Test tab) + a red "switches on" banner on every tab of that API | Frontend | ⬜ |
+| 7.6 | Frontend: **Test switches** panel (on the Test tab) + a red "switches on" banner on every tab of that API | Frontend | ✅ |
 | 7.7 | Each switch against Jivox on qa3 (the user submits; Jivox's real `verification` per switch) → expected vs actual table + docs | Both | ⬜ |
 
 ## 1. Goal (simple words)
@@ -257,4 +257,39 @@ keyboard order Pause → Clear → filters → Clear filters → rows. `npm run 
 | A button / mark inside a section heading made screen readers read "Repeat it Copy as curl" | the aside sits next to the heading |
 | Clear said "all 500 lines go" (switch lines stay) | "Every call in this API's log goes" |
 | Lint: style constants exported from a component file; an effect copying the id filter into state | `styles.ts`; adjusted during render |
+
+## 7.6 Switches panel + banner ✅ (2026-10-13)
+
+Mockup approved with the user's choices: card **after Self-check** on the Test tab · **Turn all off without asking**
+(it only restores normal answers; a toast says what went) · the banner looks **every 30 s, when the tab comes back, and
+right at the first end time** · a **line in the agent's panel** on the Jivox tab.
+
+| Part | What | Where |
+|---|---|---|
+| Shared state | the API page loads the switches once for every tab (context `switches`): every 30 s, on coming back, and 0.5 s after the first one ends (the server then writes "ended"); answers are numbered (a slow poll never undoes the change you just made) and kept per API (another API's never shows); counts with the server's clock; an ended switch disappears at once | `lib/use-switches.ts`, `pages/ApiPage.tsx`, `api-page/context.ts` |
+| Red banner | under the API header on every tab: "N test switches on: this API answers wrongly on purpose." + one line each ("Drop an id (Agent 2 only, our own checks too, ends in 15 min)"); **Manage** (→ the card, scrolled + focused) and **Turn all off** | `api-page/SwitchBanner.tsx` |
+| Test switches card | the 12 switches in 5 groups (the answer · ids · fields · timing · the request), each with what /v1 does and **what Jivox should report**; "N on" badge; a switch that's on: "● on · Agent 2 only · our own checks too · ends 01:29 (in 15 min)" + Change / Turn off; one form open at a time, in place: options (Wrong type: the API's fields from the design; Slow: ms + 3.5 / 5 / 10 s presets, checked before sending; HTTP status: the 8 codes), **who gets it** (every caller or each active token by its agents' names), **15 min / 1 h / 4 h** (default 1 h; Change: "counts from now"), **also our own checks**; server refusals shown under the form; focus returns to the row after on / change / off / cancel | `test/SwitchesCard.tsx` |
+| Agent panel | "Test switch on for this agent: Drop an id (ends in 42 min). On for every caller: … Jivox's verification will see the broken answer. Manage" above the Jivox section | `jivox/AgentPanel.tsx` |
+| Helpers | ends in, who gets it, banner lines, next end, per-agent split, form options, slow-time check, scope choices, groups, clock label | `lib/switches.ts` |
+
+**Tests:** `phase-07-task-7.6-switches-lib.test.ts` **13** (`cd frontend`). In the browser (seeded local account, 2
+agents; cleaned up): the card (5 groups, 12 rows; phone 362 px and 1024 px; no sideways scroll); turn on Drop an id for
+**Agent 2 only**, 1 h → banner on every tab (Test, Jivox, Logs, Data), row "● on · Agent 2 only · ends …", toast;
+`/v1` with Agent 1's token untouched; Jivox tab: Agent 2's panel shows the line, Agent 1's doesn't; banner **Manage**
+→ `test#test-switches`, card in view, heading focused; **Change** prefilled (Agent 2), "counts from now", 15 min + own
+checks → row / banner / toast updated, focus back on Change; Slow "abc" → refused before sending, field marked invalid,
+"5 s" preset; opening one form closes the other; Wrong type lists `sub`, `price` (not the id); Cancel → focus on
+"Turn on…"; **Turn off** → banner and badge gone, focus on the row's "Turn on…"; **set elsewhere** (a direct API call)
+→ the banner picked it up at the next 30 s look; **a 1-minute switch disappeared on its own at its end time** (no
+reload), the server removed it and wrote "ended" by nobody at the end time; two on → banner **Turn all off** → both off,
+"2 test switches turned off: the API answers normally again"; phone + light: banner readable above the tabs. `npm run
+build` + oxlint clean; lib tests 7.5 24 · 5.5 20; backend `tsc` + 7.4 switches 49 (no backend change in 7.6).
+
+| Found while doing it | Fix |
+|---|---|
+| After Turn on / Change / Turn off focus fell to the page (the pressed button is gone with the form; focusing in the same tick hit the old button) | focus moves in an effect after the row re-draws |
+| End times showed seconds ("02:12:37") | to the minute ("02:12"; another day: "13 Oct, 02:12") |
+| "Manage" scrolled the heading to the very top edge | scrolls the card (it keeps its margin) |
+| The slow-time error read "Wait: A whole number…" | "Wait (ms): a whole number of milliseconds." |
+| Lint: the hook cleared its state in an effect when the API changed | answers kept per API (a key), nothing to clear |
 

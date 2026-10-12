@@ -1,7 +1,8 @@
-import { AlertTriangle, CheckCircle2, Check, ChevronDown, ChevronRight, Copy, Download, KeyRound, Loader2, MinusCircle, Pencil, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Check, ChevronDown, ChevronRight, Copy, Download, KeyRound, Loader2, MinusCircle, Pencil, RefreshCw, ToggleRight, Trash2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
+import { useApiPage } from '@/components/apis/api-page/context'
 import { JsonBlock } from '@/components/apis/test/result-bits'
 import { Button } from '@/components/ui/button'
 import { fixTarget, groupChecks, jivoxContractText, lastTakenText } from '@/lib/agents'
@@ -9,6 +10,8 @@ import { agentsApi, ApiError, tokensApi } from '@/lib/api'
 import type { Agent, AgentCheck, Api, CheckStatus, ContractCheck } from '@/lib/api-types'
 import { copyToClipboard } from '@/lib/clipboard'
 import { formatRelativeTime } from '@/lib/format'
+import { switchName } from '@/lib/logs'
+import { endsIn, forToken, SWITCHES_CARD_ID } from '@/lib/switches'
 import { useRememberedOpen } from '@/lib/use-remembered-open'
 import { cn } from '@/lib/utils'
 import { FieldChip } from './AgentDialog'
@@ -104,6 +107,8 @@ export function AgentPanel({
       )}
 
       <StudioToken brandSlug={brandSlug} apiSlug={api.slug} agent={agent} onEdit={onEdit} />
+
+      <AgentSwitches brandSlug={brandSlug} apiSlug={api.slug} tokenId={agent.token?.id ?? null} />
 
       {/* Phase 6: submit / versions / activate / history: the main job once an agent is set up, so first */}
       <JivoxSection brandSlug={brandSlug} api={api} agent={agent} check={result} onChanged={onTaken} onEdit={onEdit} />
@@ -214,6 +219,28 @@ function CheckRow({ check, base, onEdit }: { check: ContractCheck; base: string;
         </p>
       </div>
     </li>
+  )
+}
+
+// Test switches hitting this agent (7.6): aimed at its token, or at every caller. Shown above the
+// Jivox section so nobody submits / activates while it answers wrongly on purpose without knowing.
+function AgentSwitches({ brandSlug, apiSlug, tokenId }: { brandSlug: string; apiSlug: string; tokenId: string | null }) {
+  const { switches } = useApiPage()
+  const { mine, everyone } = forToken(switches.on, tokenId)
+  if (mine.length + everyone.length === 0) return null
+  const line = (list: typeof mine) => list.map((s) => `${switchName(s.kind, s.options)} (ends ${endsIn(s.endsAt, switches.now)})`).join(', ')
+  return (
+    <p role="status" className="flex flex-wrap items-start gap-x-2 gap-y-1 rounded-lg bg-destructive/10 p-3 text-sm text-destructive">
+      <ToggleRight className="mt-0.5 size-4 shrink-0" aria-hidden="true" />
+      <span className="min-w-0 flex-1">
+        {mine.length > 0 && <>Test switch on for this agent: {line(mine)}. </>}
+        {everyone.length > 0 && <>On for every caller: {line(everyone)}. </>}
+        Jivox's verification will see the broken answer.
+      </span>
+      <Link to={`/brands/${brandSlug}/apis/${apiSlug}/test#${SWITCHES_CARD_ID}`} className="shrink-0 font-medium underline underline-offset-2 hover:no-underline">
+        Manage
+      </Link>
+    </p>
   )
 }
 

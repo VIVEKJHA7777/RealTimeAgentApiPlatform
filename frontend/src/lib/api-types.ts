@@ -340,6 +340,19 @@ export type LogEntry = {
   userAgent: string | null
   event: SwitchEvent | null // switch lines only
 }
+// ── Phase 7: test switches (task 7.4 endpoints; panel + banner 7.6) ──
+export type SwitchCatalogueEntry = { kind: SwitchKind; label: string; does: string; jivoxShould: string }
+export type ActiveSwitch = {
+  kind: SwitchKind
+  options: Record<string, unknown> // { field } wrong_type · { ms } slow · { status } http_status
+  scope: { tokenId: string; tokenName: string; tokenHint: string; revoked: boolean; agents: { id: string; name: string }[] } | null // null = every caller
+  applyToOwnChecks: boolean
+  since: string
+  endsAt: string
+  setBy: string | null
+}
+export type SwitchesState = { switches: ActiveSwitch[]; catalogue: SwitchCatalogueEntry[]; now: string; turnedOff?: number }
+export type SetSwitchInput = { options?: Record<string, unknown>; tokenId?: string | null; minutes?: number; applyToOwnChecks?: boolean }
 export type LogToken = { name: string; hint: string; revoked: boolean; agents: { id: string; name: string }[] }
 export type LogsPage = {
   entries: LogEntry[] // newest first

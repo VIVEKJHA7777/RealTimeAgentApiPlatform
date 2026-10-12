@@ -1,5 +1,6 @@
 import { useOutletContext } from 'react-router'
 import type { Api, DataSource, Organization } from '@/lib/api-types'
+import type { SwitchesHandle } from '@/lib/use-switches'
 
 // What the API page (the layout: header + tabs) hands to the tab inside it (<Outlet />).
 export type ApiPageContext = {
@@ -12,6 +13,8 @@ export type ApiPageContext = {
   // the header's Publish button checks again.
   readinessChanged: () => void
   readinessTick: number
+  // The API's test switches (7.6): the banner, the Test tab's card and the agent panels share them.
+  switches: SwitchesHandle
 }
 
 export function useApiPage() {

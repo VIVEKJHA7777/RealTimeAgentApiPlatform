@@ -2,6 +2,7 @@ import { ChevronRight, SearchX } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useParams } from 'react-router'
 import { ApiActions } from '@/components/apis/api-page/ApiActions'
+import { SwitchBanner } from '@/components/apis/api-page/SwitchBanner'
 import type { ApiPageContext } from '@/components/apis/api-page/context'
 import { FeedTypeIcon } from '@/components/apis/FeedTypeIcon'
 import { CopyButton } from '@/components/CopyButton'
@@ -15,6 +16,7 @@ import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { isImportActive } from '@/lib/imports'
 import { usePolling } from '@/lib/use-polling'
 import { useRequest } from '@/lib/use-request'
+import { useSwitches } from '@/lib/use-switches'
 import { cn } from '@/lib/utils'
 
 // The API page's tabs. Each ready tab has its own address (Back / reload / sharing work):
@@ -121,7 +123,7 @@ export function ApiPage() {
   )
 }
 
-function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContext, 'readinessChanged' | 'readinessTick'>) {
+function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContext, 'readinessChanged' | 'readinessTick' | 'switches'>) {
   // On a phone the tab strip scrolls sideways: keep the open tab in view (Logs is the 6th, 7.5).
   const { pathname } = useLocation()
   const tabStrip = useRef<HTMLElement>(null)
@@ -129,6 +131,7 @@ function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContex
     tabStrip.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }, [pathname])
   const [readinessTick, setReadinessTick] = useState(0)
+  const switches = useSwitches(organization.slug, api.slug)
   const context: ApiPageContext = {
     organization,
     api,
@@ -136,6 +139,7 @@ function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContex
     refresh,
     readinessTick,
     readinessChanged: () => setReadinessTick((n) => n + 1),
+    switches,
   }
   const base = `/brands/${organization.slug}/apis/${api.slug}`
   return (
@@ -175,6 +179,8 @@ function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContex
           <CopyButton value={api.path} label="Copy API path" />
         </div>
       </header>
+
+      <SwitchBanner brandSlug={organization.slug} apiSlug={api.slug} switches={switches} />
 
       <nav ref={tabStrip} aria-label="API sections" className="-mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((tab) =>

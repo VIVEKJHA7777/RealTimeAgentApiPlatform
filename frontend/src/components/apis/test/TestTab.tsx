@@ -4,12 +4,13 @@ import { useTokens } from '@/lib/use-tokens'
 import { CallCard } from './CallCard'
 import { RecentCallsCard } from './RecentCallsCard'
 import { SelfCheckCard } from './SelfCheckCard'
+import { SwitchesCard } from './SwitchesCard'
 import { TokensCard } from './TokensCard'
 
 // The API page's Test tab (Phase 4, mockup 1): tokens (4.6), then calling it, Try it and the
-// self-check (4.7), then the last calls to the live URL (4.8c). Publish is in the page header. The token list and the ids box are shared.
+// self-check (4.7), the test switches (7.6), then the last calls to the live URL (4.8c). Publish is in the page header. The token list and the ids box are shared.
 export function TestTab() {
-  const { organization, api, refresh, readinessChanged } = useApiPage()
+  const { organization, api, refresh, readinessChanged, switches } = useApiPage()
   const tokens = useTokens(organization.slug, api.slug)
   const [idsText, setIdsText] = useState('')
   return (
@@ -23,6 +24,7 @@ export function TestTab() {
       />
       <CallCard brandSlug={organization.slug} api={api} tokens={tokens.data?.tokens ?? []} idsText={idsText} onIdsTextChange={setIdsText} />
       <SelfCheckCard brandSlug={organization.slug} api={api} idsText={idsText} />
+      <SwitchesCard brandSlug={organization.slug} api={api} switches={switches} />
       <RecentCallsCard brandSlug={organization.slug} api={api} />
     </div>
   )
