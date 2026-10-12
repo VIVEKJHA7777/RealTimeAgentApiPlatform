@@ -1,6 +1,7 @@
 import { Building2, ChevronRight, Plus } from 'lucide-react'
 import { Link } from 'react-router'
 import { BrandAvatar } from '@/components/brands/BrandAvatar'
+import { WelcomeStrip } from '@/components/brands/WelcomeStrip'
 import { EmptyState, ErrorState } from '@/components/PageStates'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,7 +10,8 @@ import type { Organization } from '@/lib/api-types'
 import { formatDateTime, formatRelativeTime } from '@/lib/format'
 import { useRequest } from '@/lib/use-request'
 
-// "/" : the logged-in home page. Lists the user's brands, newest first.
+// "/" : the logged-in home page. The welcome strip (what this is, who built it), then the user's
+// brands, newest first.
 export function BrandsPage() {
   const { data, error, loading, reload } = useRequest(
     'organizations',
@@ -29,9 +31,11 @@ export function BrandsPage() {
 
   return (
     <div className="mx-auto flex max-w-5xl flex-col gap-8 animate-in fade-in duration-300">
+      <WelcomeStrip />
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Your brands</h1>
+          {/* The strip holds the page's h1; this section is the list under it. */}
+          <h2 className="text-xl font-semibold tracking-tight">Your brands</h2>
           <p className="mt-1 text-sm text-muted-foreground">
             {data && count > 0
               ? `${count} ${count === 1 ? 'brand' : 'brands'} · each one gets its own data, tokens and realtime API`
