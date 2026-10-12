@@ -1,6 +1,6 @@
 # Phase 6: Submit and activate contracts in Jivox (per agent)
 
-**Status:** 🔄 6.0–6.4 done (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
+**Status:** 🔄 6.0–6.5 done (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
 **Roadmap:** [../ROADMAP.md](../ROADMAP.md) · **Big picture:** [../PLAN-v2-api-first.md](../PLAN-v2-api-first.md)
 **Depends on:** Phase 5 (agents, contracts, checklist, out of date) · the Render deploy (a public https address)
 
@@ -15,7 +15,7 @@
 | 6.2 | **Fake Jivox learns to write**: `submit_contract` / `list_contracts` / `activate_contract` on the fake MCP server with every outcome (verified vN, failed + evidence, invalid + fixes, gate_failed, slow, unreachable, activate refused) and real version numbering, so 6.3–6.5 are built and tested without touching qa3 | Backend | ✅ |
 | 6.3 | Database: `jivox_contract_actions` (every submit / activate per agent: document, shape, design version, outcome, Jivox version, Jivox's answer, who, when) + one-at-a-time guard | Backend | ✅ |
 | 6.4 | Backend: **Submit** (fresh contract → `submit_contract`), **Versions** (`list_contracts`, live), **Activate** (`activate_contract`), **History**; write tools only to allowed Jivox hosts | Backend | ✅ |
-| 6.5 | Frontend: a **Jivox** section in each agent's panel (Submit, result explained, versions + Activate, history) + a Jivox status chip per agent in the table | Frontend | ⬜ |
+| 6.5 | Frontend: a **Jivox** section in each agent's panel (Submit, result explained, versions + Activate, history) + a Jivox status chip per agent in the table | Frontend | ✅ |
 | 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | ⬜ |
 | 6.7 | End-to-end + docs (the fake for every edge case; the qa3 record as proof) | Both | ⬜ |
 
@@ -214,3 +214,35 @@ removing an agent removes its history. Regression: 5.2 56 · 5.5 31 · 5.7 42 ·
 |---|---|
 | After a 401, the "id appears 0 times" problems added a misleading hint (sample ids) | a non-2xx HTTP problem stands alone |
 | The user's copy: the 6.0 `env.ts` change was applied only half (settings, not the `export const env` block) → `npm run build` fails there (`AUTH_ATTEMPTS_PER_15_MIN` possibly undefined); the dev server still ran (tsx doesn't type-check) | `docs/patches/6.4-your-copy.patch` carries the missing part too; checked on a scratch copy of their backend |
+
+## 6.5 Jivox section + chip ✅ (2026-10-12)
+
+Mockup shown in chat before building (panel section, dialogs, table chip).
+
+| Part | What | Where |
+|---|---|---|
+| Table | a **Jivox** column (phone: on the fields line): Sending… / Activating v3… (spinner) · **v2 active** · v3 verified (newer than the active one, or none active) · Not verified · Not submitted · Not connected; the title says why | `JivoxTab.tsx`, `lib/agents.ts` (`jivoxChip`) |
+| Section | under the checklist + contract: "Jivox" + the MCP host · Refresh · **Submit to Jivox** (disabled while not connected / no checklist yet / busy) · what happens in one line · busy banners (ours, or "another tab or person", which polls every 3 s and updates by itself) · the **last result** · **Versions** (live from Jivox; active badge; "design v7 · when · who" or "not submitted from this app"; Activate) · **History** (newest first, Load more; a row opens the record in full: explanation, Jivox's evidence, the contract sent) | `jivox/JivoxSection.tsx`, `AgentPanel.tsx` |
+| Result card | outcome in words (`OUTCOME`, colour by tone) + when · design version · who · "sent anyway with ✗ …" · Jivox's message · each problem (code, message, Jivox's fix) · **our hints with links** (Design / Test / Overview tabs, or Edit the agent) · evidence + an unknown answer in `<details>` · **Activate vN** on a verified one · Hide | same |
+| Dialogs | Submit: names the agent and the **host**; with ✗ lists them and says "Submit anyway" (a 409 CHECKLIST_FAILED from the server re-opens it with the server's list). Activate: names the host, says which version is retired and that it can't be undone | same |
+| Focus | a dialog returns focus to the button that opened it (else Submit); after an action the **result card** takes focus (the button may be gone) | same |
+
+**Browser** (1100 px light; 375 px dark; keyboard), on a local account with the fake Jivox: table column; Submit with
+✗ base_url → dialog names `127.0.0.1:4803` + the failing check → Submit anyway → **failed** (401) explained: Jivox's
+message, 4 problems, our hint "paste this agent's token in Studio", evidence; chip "Not verified" → token set on the
+fake → **verified v1**, chip "v1 verified", Activate v1 on the card → dialog (Escape → focus back on Activate) →
+activated, chip "v1 active", version Active → v2 → Activate v2 (dialog says v1 retired) → v2 active, v1 gone from
+versions, 5 history rows → history row opened: evidence + the contract sent → a slow submit started from outside:
+Submit → toast "still running (started 1 s ago)", banner "another tab or person", chip "Sending…", Submit disabled,
+then it **updated by itself** (v4 verified) → second agent, HTTP 500 → amber "Jivox answered with an error" → phone
+dark: no side scroll, readable. Console: only expected 401 / 409 (plus one hot-reload warning while editing).
+**Tests:** `phase-06-task-6.5-jivox-ui-lib.test.ts` **9** (chip states, titles, wording). Regression: 6.4 endpoints 40 ·
+5.5 lib 20; types + lint clean; the user's frontend with the 6.5 files type-checks (scratch copy).
+
+| Found while doing it | Fix |
+|---|---|
+| Focus fell to the page after the Submit / Activate dialogs (opened by state) | back to the button that opened it, else Submit |
+| After Activate its button vanished (now active) → focus lost; the card was hidden while sending, so focusing it early did nothing | the result card takes focus once the action is over |
+| "Submit → jivox answered…" (lower-casing the whole phrase) | only the first letter, never "Jivox" |
+| The host broke mid-word on phones next to the title | its own line under "Jivox" |
+| An amber style on the dialog's "Submit anyway" button didn't apply (the dialog's own style wins) | dropped; the warning box says it |

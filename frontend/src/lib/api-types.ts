@@ -329,10 +329,59 @@ export type Agent = {
   jivox: JivoxFacts | null
   lastError: string | null
   contract: ContractState
+  jivoxActions: JivoxActionSummary | null // 6.4: what WE last saw of its submits / activations
   createdAt: string
   updatedAt: string
 }
 export type AgentList = { agents: Agent[]; limits: { maxAgents: number } }
+
+// ── Phase 6: submitting / activating contracts in Jivox (task 6.4 endpoints) ──
+export type JivoxActionSummary = {
+  activeVersion: number | null // the last version WE activated (Jivox stays the source of truth)
+  activatedAt: string | null
+  lastSubmit: { outcome: JivoxOutcome | null; version: number | null; at: string } | null
+  running: { kind: 'submit' | 'activate'; version: number | null; startedAt: string } | null
+}
+export type JivoxOutcome =
+  | 'verified' | 'failed' | 'invalid' | 'gate_failed' | 'activated' | 'refused' | 'unknown'
+  | 'unreachable' | 'auth_failed' | 'bad_answer' | 'timeout' | 'interrupted'
+export type JivoxProblem = { code: string | null; message: string; fix: string | null; path: string | null }
+export type JivoxHint = { text: string; place: FixPlace }
+// One submit / activate as recorded. Light in the history list; with document + answer in full.
+export type JivoxAction = {
+  id: string
+  kind: 'submit' | 'activate'
+  state: 'running' | 'done' | 'error'
+  outcome: JivoxOutcome | null
+  jivoxStatus: string | null
+  version: number | null
+  mcpHost: string
+  designVersion: number | null
+  failedChecks: string[] // sent "anyway" with these ✗
+  errorMessage: string | null
+  startedAt: string
+  finishedAt: string | null
+  startedBy: string | null
+  message?: string | null
+  problems?: JivoxProblem[]
+  hints?: JivoxHint[]
+  evidence?: unknown
+  retired?: number | null
+  answer?: unknown
+  document?: unknown
+}
+export type JivoxVersions = {
+  activeVersion: number | null
+  versions: {
+    version: number
+    status: string | null
+    active: boolean
+    createdAt: string | null
+    submittedHere: { actionId: string; designVersion: number | null; at: string; by: string | null } | null
+    extra: Record<string, unknown>
+  }[]
+  running: { kind: string; version: number | null; startedAt: string } | null
+}
 // 5.6: the contract last copied / downloaded, and whether today's differs from it.
 //   last null → never taken · outOfDate null → unknown (no design to compare with)
 export type ContractState = {

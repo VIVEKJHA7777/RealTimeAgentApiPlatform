@@ -11,6 +11,7 @@ import { copyToClipboard } from '@/lib/clipboard'
 import { formatRelativeTime } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FieldChip } from './AgentDialog'
+import { JivoxSection } from './JivoxSection'
 
 export type CheckState = { status: 'loading'; previous?: AgentCheck } | { status: 'ok'; result: AgentCheck } | { status: 'error'; error: ApiError }
 
@@ -150,6 +151,9 @@ export function AgentPanel({
 
         <ContractBox brandSlug={brandSlug} api={api} agent={agent} result={result} onTaken={onTaken} />
       </div>
+
+      {/* Phase 6: submit / versions / activate / history */}
+      <JivoxSection brandSlug={brandSlug} api={api} agent={agent} check={result} onChanged={onTaken} onEdit={onEdit} />
     </div>
   )
 }

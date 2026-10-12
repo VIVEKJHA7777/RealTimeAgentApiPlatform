@@ -1,7 +1,7 @@
 // Pure helpers for the Jivox tab (task 5.5): the agent form (validation, what to send), sample ids,
 // the checklist's groups and fix links. No React here (tested by
 // docs/test-scripts/phase-05-task-5.5-agents-lib.test.ts).
-import type { Agent, AgentCheck, AgentInput, ContractCheck, FixPlace, ContractState } from './api-types'
+import type { Agent, AgentCheck, AgentInput, ContractCheck, FixPlace, ContractState, JivoxAction, JivoxOutcome } from './api-types'
 
 export const AGENT_NAME_MAX = 60
 export const MAX_SAMPLE_IDS = 10
@@ -169,4 +169,50 @@ export function contractMark(state: ContractState | undefined): { text: string; 
 // "Copied 5 min ago (design v5)"
 export function lastTakenText(last: NonNullable<ContractState['last']>, relative: (iso: string) => string) {
   return `${HOW[last.how]} ${relative(last.at)} (design v${last.designVersion})`
+}
+
+// ── Phase 6 (task 6.5): Jivox submits / activations in words ──
+export type Tone = 'ok' | 'fail' | 'warn' | 'busy' | 'muted'
+// Lower-case the first letter only ("Failed verification" → "failed verification"), never the name Jivox.
+const lowerFirst = (t: string) => (t.startsWith('Jivox') ? t : t.charAt(0).toLowerCase() + t.slice(1))
+
+// The table's Jivox chip, from what WE last saw (Jivox stays the source of truth: the panel reads it live).
+export function jivoxChip(agent: Agent): { text: string; tone: Tone; title?: string } {
+  const j = agent.jivoxActions
+  if (j?.running) return { text: j.running.kind === 'submit' ? 'Sending…' : `Activating v${j.running.version}…`, tone: 'busy' }
+  const last = j?.lastSubmit
+  const active = j?.activeVersion ?? null
+  if (last?.outcome === 'verified' && last.version !== null && (active === null || last.version > active)) {
+    return { text: `v${last.version} verified`, tone: 'warn', title: active ? `v${active} is active; v${last.version} is verified but not active yet` : 'Verified, not active yet: activate it' }
+  }
+  if (active !== null) {
+    const failedSince = last && last.outcome !== 'verified' ? ' (last submit didn\'t verify)' : ''
+    return { text: `v${active} active`, tone: 'ok', title: `Version ${active} is live in Jivox${failedSince}` }
+  }
+  if (last) return { text: 'Not verified', tone: 'fail', title: `Last submit: ${lowerFirst(OUTCOME[last.outcome ?? 'unknown'].text)}` }
+  if (!agent.mcpUrl || !agent.accessKey) return { text: 'Not connected', tone: 'muted', title: 'Add the MCP destination and access key (Edit)' }
+  return { text: 'Not submitted', tone: 'muted' }
+}
+
+export const OUTCOME: Record<JivoxOutcome | 'running', { text: string; tone: Tone }> = {
+  running: { text: 'Waiting for Jivox', tone: 'busy' },
+  verified: { text: 'Verified', tone: 'ok' },
+  activated: { text: 'Activated', tone: 'ok' },
+  failed: { text: 'Failed verification', tone: 'fail' },
+  invalid: { text: 'Invalid contract', tone: 'fail' },
+  gate_failed: { text: "Doesn't fit the agent", tone: 'fail' },
+  refused: { text: 'Refused', tone: 'fail' },
+  unknown: { text: 'Unrecognised answer', tone: 'warn' },
+  unreachable: { text: "Couldn't reach Jivox", tone: 'warn' },
+  auth_failed: { text: 'Access key refused', tone: 'warn' },
+  bad_answer: { text: 'Jivox answered with an error', tone: 'warn' },
+  timeout: { text: 'No answer in time', tone: 'warn' },
+  interrupted: { text: 'Interrupted', tone: 'warn' },
+}
+
+// "Submit → verified v3" · "Activate v2 → activated (v1 retired)" · "Submit → failed verification"
+export function actionTitle(a: JivoxAction): string {
+  const o = OUTCOME[a.state === 'running' ? 'running' : (a.outcome ?? 'unknown')]
+  if (a.kind === 'submit') return `Submit → ${lowerFirst(o.text)}${a.outcome === 'verified' && a.version ? ` v${a.version}` : ''}`
+  return `Activate v${a.version} → ${lowerFirst(o.text)}${a.outcome === 'activated' && a.retired ? ` (v${a.retired} retired)` : ''}`
 }

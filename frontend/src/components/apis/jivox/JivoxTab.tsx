@@ -14,7 +14,7 @@ import {
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
 import { Skeleton } from '@/components/ui/skeleton'
-import { checkSummary, contractMark, mcpHost } from '@/lib/agents'
+import { checkSummary, contractMark, jivoxChip, mcpHost, type Tone } from '@/lib/agents'
 import { agentsApi, ApiError } from '@/lib/api'
 import type { Agent } from '@/lib/api-types'
 import { formatRelativeTime } from '@/lib/format'
@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
 import { AgentDialog, FieldChip } from './AgentDialog'
 import { AgentPanel, type CheckState } from './AgentPanel'
 
-const COLS = '@2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.3fr)_minmax(0,0.8fr)_minmax(0,0.7fr)_1rem]'
+const COLS = '@2xl:grid-cols-[minmax(0,1.2fr)_minmax(0,1.2fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_minmax(0,0.7fr)_1rem]'
 
 // The API page's Jivox tab (Phase 5, task 5.5): the Real Time Agents this API serves (many per API),
 // each with its own contract (only its fields) and checklist. Opening an agent runs its checks;
@@ -175,6 +175,7 @@ export function JivoxTab() {
             <span>Fields</span>
             <span>Token</span>
             <span>Contract</span>
+            <span>Jivox</span>
             <span />
           </div>
           <ul aria-label="Agents">
@@ -245,6 +246,7 @@ export function JivoxTab() {
 function AgentRow({ agent, open, check, reading, onToggle, children }: { agent: Agent; open: boolean; check: CheckState | undefined; reading: boolean; onToggle: () => void; children: React.ReactNode }) {
   const summary = checkSummary(check?.status === 'ok' ? check.result : undefined)
   const mark = contractMark(agent.contract)
+  const jivox = jivoxChip(agent)
   const sub = [
     agent.brandstore,
     agent.accessKey ? `key ••${agent.accessKey.hint}` : 'no key',
@@ -287,6 +289,7 @@ function AgentRow({ agent, open, check, reading, onToggle, children }: { agent: 
         <span className="col-span-2 flex min-w-0 flex-wrap items-center gap-1 @2xl:col-span-1 @2xl:col-start-2 @2xl:row-start-1">
           {/* Phone: on the fields line, so the name keeps its room */}
           {mark && <OutOfDate mark={mark} className="mr-1 @2xl:hidden" />}
+          <JivoxChip chip={jivox} className="mr-1 @2xl:hidden" />
           {shown.length ? shown.map((f) => <FieldChip key={f} name={f} />) : <span className="text-xs text-muted-foreground">No fields yet</span>}
           {agent.fields.length > shown.length && <span className="text-xs text-muted-foreground">+{agent.fields.length - shown.length}</span>}
         </span>
@@ -294,7 +297,10 @@ function AgentRow({ agent, open, check, reading, onToggle, children }: { agent: 
           <span className="@2xl:hidden text-muted-foreground">Token: </span>
           {agent.token ? `${agent.token.name}${agent.token.state !== 'active' ? ` (${agent.token.state})` : ''}` : 'no token'}
         </span>
-        <span className="hidden @2xl:col-start-5 @2xl:row-start-1 @2xl:block">
+        <span className="hidden min-w-0 @2xl:col-start-5 @2xl:row-start-1 @2xl:block">
+          <JivoxChip chip={jivox} />
+        </span>
+        <span className="hidden @2xl:col-start-6 @2xl:row-start-1 @2xl:block">
           {open ? <ChevronDown className="size-4 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />}
         </span>
       </button>
@@ -308,6 +314,23 @@ function OutOfDate({ mark, className }: { mark: { text: string; title: string };
   return (
     <span className={cn('rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium whitespace-nowrap text-amber-800 dark:text-amber-300', className)} title={mark.title} data-testid="out-of-date-chip">
       {mark.text}
+    </span>
+  )
+}
+
+// The agent's Jivox state as we last saw it (6.5): v2 active · v3 verified · Not verified · Sending… · Not submitted
+const CHIP: Record<Tone, string> = {
+  ok: 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400',
+  warn: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
+  fail: 'bg-destructive/10 text-destructive',
+  busy: 'bg-sky-500/15 text-sky-700 dark:text-sky-300',
+  muted: 'bg-muted text-muted-foreground',
+}
+function JivoxChip({ chip, className }: { chip: { text: string; tone: Tone; title?: string }; className?: string }) {
+  return (
+    <span className={cn('inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap', CHIP[chip.tone], className)} title={chip.title} data-testid="jivox-chip">
+      {chip.tone === 'busy' && <Loader2 className="size-3 animate-spin" aria-hidden="true" />}
+      {chip.text}
     </span>
   )
 }

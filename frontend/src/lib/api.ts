@@ -31,6 +31,8 @@ import type {
   Agent,
   AgentCheck,
   ContractDocument,
+  JivoxAction,
+  JivoxVersions,
   AgentContract,
   AgentInput,
   AgentList,
@@ -349,6 +351,16 @@ export const agentsApi = {
     const fileName = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? 'contract.json'
     return { text: await res.text(), fileName }
   },
+  // ── Phase 6: write to Jivox (task 6.4). Once sent, always 200 { action }: its record says what happened.
+  submit: (brandSlug: string, apiSlug: string, agentId: string, anyway: boolean) =>
+    apiFetch<{ action: JivoxAction }>(`${agentPath(brandSlug, apiSlug, agentId)}/jivox/submit`, { method: 'POST', body: { anyway } }),
+  versions: (brandSlug: string, apiSlug: string, agentId: string) => apiFetch<JivoxVersions>(`${agentPath(brandSlug, apiSlug, agentId)}/jivox/versions`),
+  activate: (brandSlug: string, apiSlug: string, agentId: string, version: number) =>
+    apiFetch<{ action: JivoxAction }>(`${agentPath(brandSlug, apiSlug, agentId)}/jivox/versions/${version}/activate`, { method: 'POST' }),
+  actions: (brandSlug: string, apiSlug: string, agentId: string, before?: string) =>
+    apiFetch<{ actions: JivoxAction[]; next: string | null }>(`${agentPath(brandSlug, apiSlug, agentId)}/jivox/actions${before ? `?before=${encodeURIComponent(before)}` : ''}`),
+  action: (brandSlug: string, apiSlug: string, agentId: string, actionId: string) =>
+    apiFetch<{ action: JivoxAction }>(`${agentPath(brandSlug, apiSlug, agentId)}/jivox/actions/${encodeURIComponent(actionId)}`),
   // 5.6: remember the contract just copied / downloaded (its shape) → "out of date" when it changes.
   taken: (brandSlug: string, apiSlug: string, agentId: string, input: { how: 'copy' | 'download'; designVersion: number; document: ContractDocument }) =>
     apiFetch<{ agent: Agent }>(`${agentPath(brandSlug, apiSlug, agentId)}/contract/taken`, { method: 'POST', body: input }),
