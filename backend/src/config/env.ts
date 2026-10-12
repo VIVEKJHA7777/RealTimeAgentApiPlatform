@@ -63,6 +63,9 @@ const envSchema = z.object({
   // The built frontend (frontend/dist) served by this server, so the whole app is one https
   // address (the login cookie then works without CORS). Not set: ../frontend/dist when it exists.
   FRONTEND_DIST: z.string().min(1).optional(),
+  // Jivox MCP hosts our app may WRITE to (submit / activate), comma-separated. Not set = any (the
+  // user's choice 2026-10-12, P6-2); e.g. brandstore-data-mcp.qa3.jivox.com to allow qa3 only.
+  JIVOX_WRITE_HOSTS: z.string().trim().max(2000).optional(),
   // Set by Render on every service ("https://<name>.onrender.com"): the default PUBLIC_BASE_URL there.
   RENDER_EXTERNAL_URL: z.preprocess(
     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),

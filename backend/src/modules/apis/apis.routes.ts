@@ -66,4 +66,10 @@ apisRouter.get('/:apiSlug/agents/:agentId/contract/download', requireApi, agents
 apisRouter.post('/:apiSlug/agents/:agentId/contract/check', requireApi, agentsController.checkContract);
 // Task 5.6: the contract the user copied / downloaded (its shape), for "out of date".
 apisRouter.post('/:apiSlug/agents/:agentId/contract/taken', requireApi, agentsController.contractTaken);
+// Phase 6 (task 6.4): write to Jivox per agent (submit / activate), its versions (live) and our history.
+apisRouter.post('/:apiSlug/agents/:agentId/jivox/submit', requireApi, agentsController.submit);
+apisRouter.get('/:apiSlug/agents/:agentId/jivox/versions', requireApi, agentsController.versions);
+apisRouter.post('/:apiSlug/agents/:agentId/jivox/versions/:version/activate', requireApi, agentsController.activate);
+apisRouter.get('/:apiSlug/agents/:agentId/jivox/actions', requireApi, agentsController.history);
+apisRouter.get('/:apiSlug/agents/:agentId/jivox/actions/:actionId', requireApi, agentsController.actionDetail);
 

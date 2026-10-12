@@ -3,7 +3,8 @@
 // no bodies.
 import type { Request, Response } from 'express';
 import { validate } from '../../../lib/validate.js';
-import { contractTakenSchema, createAgentSchema, updateAgentSchema } from './agents.schemas.js';
+import { contractTakenSchema, createAgentSchema, historyQuery, submitSchema, updateAgentSchema, versionParam } from './agents.schemas.js';
+import * as jivoxWrites from './jivox-writes.service.js';
 import * as agentsService from './agents.service.js';
 import { checkAgentContract } from './contract-check.js';
 import { contractFileName, generateAgentContract } from './contract.js';
@@ -81,4 +82,42 @@ export async function contractTaken(req: Request, res: Response) {
   const input = validate(contractTakenSchema, req.body ?? {});
   res.set('Cache-Control', 'no-store');
   res.json(await agentsService.markContractTaken(req.api!, brand(req), agentId(req), input));
+}
+
+// ── Phase 6 (task 6.4): Submit / Versions / Activate / History, per agent ──
+
+// POST …/agents/:agentId/jivox/submit { anyway?: boolean } → 200 { action } (also when Jivox couldn't be
+// reached: the action says so) · 409 AGENT_NOT_CONNECTED / ACCESS_KEY_UNREADABLE / CHECKLIST_FAILED
+// (extra.failed) / JIVOX_BUSY (extra.running) / NO_DESIGN / NO_DATA · 403 JIVOX_WRITE_HOST_NOT_ALLOWED · 413
+export async function submit(req: Request, res: Response) {
+  const input = validate(submitSchema, req.body ?? {});
+  res.set('Cache-Control', 'no-store');
+  res.json(await jivoxWrites.submitToJivox(req.api!, brand(req), agentId(req), req.user!.id, input.anyway));
+}
+
+// GET …/agents/:agentId/jivox/versions → 200 { activeVersion, versions: [{ version, status, active,
+// createdAt, submittedHere, extra }], running } · 422 JIVOX_AUTH_FAILED · 502 JIVOX_UNREACHABLE / JIVOX_BAD_ANSWER
+export async function versions(req: Request, res: Response) {
+  res.set('Cache-Control', 'no-store');
+  res.json(await jivoxWrites.jivoxVersions(req.api!, agentId(req)));
+}
+
+// POST …/agents/:agentId/jivox/versions/:version/activate → 200 { action } · 400 · 409 · 403
+export async function activate(req: Request, res: Response) {
+  const version = validate(versionParam, req.params.version);
+  res.set('Cache-Control', 'no-store');
+  res.json(await jivoxWrites.activateOnJivox(req.api!, agentId(req), req.user!.id, version));
+}
+
+// GET …/agents/:agentId/jivox/actions?before=&limit= → 200 { actions (light), next }
+export async function history(req: Request, res: Response) {
+  const q = validate(historyQuery, req.query);
+  res.set('Cache-Control', 'no-store');
+  res.json(await jivoxWrites.jivoxHistory(req.api!, agentId(req), q));
+}
+
+// GET …/agents/:agentId/jivox/actions/:actionId → 200 { action } with the document sent + Jivox's answer · 404
+export async function actionDetail(req: Request, res: Response) {
+  res.set('Cache-Control', 'no-store');
+  res.json(await jivoxWrites.jivoxActionDetail(req.api!, agentId(req), String(req.params.actionId)));
 }

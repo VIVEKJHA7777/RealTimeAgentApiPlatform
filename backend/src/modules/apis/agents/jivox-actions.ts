@@ -161,3 +161,36 @@ export async function listActions(agentId: string, opts: { limit?: number; befor
 }
 
 export const getAction = (agentId: string, id: string) => prisma.jivoxContractAction.findFirst({ where: { id, agentId } });
+
+// For the agents table (6.5): per agent, as WE last saw it (one query each, all agents at once).
+export async function jivoxSummaries(agentIds: string[]) {
+  if (agentIds.length === 0) return new Map<string, JivoxSummary>();
+  const [activated, submits, running] = await Promise.all([
+    prisma.$queryRaw<{ agent_id: string; version: number; started_at: Date }[]>`
+      SELECT DISTINCT ON (agent_id) agent_id, version, started_at FROM jivox_contract_actions
+      WHERE agent_id = ANY(${agentIds}) AND outcome = 'activated' ORDER BY agent_id, started_at DESC`,
+    prisma.$queryRaw<{ agent_id: string; outcome: string | null; version: number | null; state: string; started_at: Date }[]>`
+      SELECT DISTINCT ON (agent_id) agent_id, outcome, version, state, started_at FROM jivox_contract_actions
+      WHERE agent_id = ANY(${agentIds}) AND kind = 'submit' AND state <> 'running' ORDER BY agent_id, started_at DESC`,
+    prisma.jivoxContractAction.findMany({ where: { agentId: { in: agentIds }, state: 'running' }, select: { agentId: true, kind: true, version: true, startedAt: true } }),
+  ]);
+  const out = new Map<string, JivoxSummary>();
+  for (const id of agentIds) {
+    const a = activated.find((x) => x.agent_id === id);
+    const s = submits.find((x) => x.agent_id === id);
+    const r = running.find((x) => x.agentId === id);
+    out.set(id, {
+      activeVersion: a?.version ?? null,
+      activatedAt: a?.started_at ?? null,
+      lastSubmit: s ? { outcome: s.outcome, version: s.version, at: s.started_at } : null,
+      running: r ? { kind: r.kind, version: r.version, startedAt: r.startedAt } : null,
+    });
+  }
+  return out;
+}
+export type JivoxSummary = {
+  activeVersion: number | null;
+  activatedAt: Date | null;
+  lastSubmit: { outcome: string | null; version: number | null; at: Date } | null;
+  running: { kind: string; version: number | null; startedAt: Date } | null;
+};

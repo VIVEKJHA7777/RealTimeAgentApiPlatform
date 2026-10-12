@@ -1,6 +1,6 @@
 # Phase 6: Submit and activate contracts in Jivox (per agent)
 
-**Status:** 🔄 6.0–6.3 done (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
+**Status:** 🔄 6.0–6.4 done (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
 **Roadmap:** [../ROADMAP.md](../ROADMAP.md) · **Big picture:** [../PLAN-v2-api-first.md](../PLAN-v2-api-first.md)
 **Depends on:** Phase 5 (agents, contracts, checklist, out of date) · the Render deploy (a public https address)
 
@@ -14,7 +14,7 @@
 | 6.1 | **Live deploy** (the user, with the guide) + check it: deploy script against the Render address; every agent's "Jivox can reach the base URL" ✓ | Infra | ✅ |
 | 6.2 | **Fake Jivox learns to write**: `submit_contract` / `list_contracts` / `activate_contract` on the fake MCP server with every outcome (verified vN, failed + evidence, invalid + fixes, gate_failed, slow, unreachable, activate refused) and real version numbering, so 6.3–6.5 are built and tested without touching qa3 | Backend | ✅ |
 | 6.3 | Database: `jivox_contract_actions` (every submit / activate per agent: document, shape, design version, outcome, Jivox version, Jivox's answer, who, when) + one-at-a-time guard | Backend | ✅ |
-| 6.4 | Backend: **Submit** (fresh contract → `submit_contract`), **Versions** (`list_contracts`, live), **Activate** (`activate_contract`), **History**; write tools only to allowed Jivox hosts | Backend | ⬜ |
+| 6.4 | Backend: **Submit** (fresh contract → `submit_contract`), **Versions** (`list_contracts`, live), **Activate** (`activate_contract`), **History**; write tools only to allowed Jivox hosts | Backend | ✅ |
 | 6.5 | Frontend: a **Jivox** section in each agent's panel (Submit, result explained, versions + Activate, history) + a Jivox status chip per agent in the table | Frontend | ⬜ |
 | 6.6 | **Real qa3 run, step by step with the user's OK before each write**: agent 1 submit → verified v1 → activate; agent 2 the same; a broken contract → failed with evidence; Studio status checked | Both | ⬜ |
 | 6.7 | End-to-end + docs (the fake for every edge case; the qa3 record as proof) | Both | ⬜ |
@@ -186,3 +186,31 @@ SET NULL, the history index; the library on real rows (busy with its reason, par
 answer / message, stale takeover vs a 1-minute-old row, start-up cleanup, 413, 300 KB answer → preview, unknown status,
 25 rows → 20 + 5 pages); races: **20 clicks at once on one agent → exactly 1 started, 19 JIVOX_BUSY**; 5 agents at once
 → 5 started. A NEW empty database: all 14 migrations apply. Regression: 5.2 56 · 5.5 31; types clean.
+
+## 6.4 Submit / Versions / Activate / History endpoints ✅ (2026-10-12)
+
+| Part | What | Where |
+|---|---|---|
+| Client | `callWrite(submit_contract | activate_contract)`: 60 s timeout (Jivox calls our API once meanwhile), a tool `isError` is RETURNED (Jivox's refusals must be recorded), new error kind `timeout` (Read from Jivox keeps treating it as unreachable) | `lib/jivox-mcp.ts`, `agents.service.ts` |
+| Reading answers | loose (Jivox's real shapes unknown until 6.6): status from `status` / `state` / `result` / `outcome` with several spellings; version from `version` / `contract.version` ("verified" without a version → unknown); problems from `errors` (objects or text) + `evidence.problems`; activate: `retired` / `previous_version`, refused reason → a problem; versions: `contracts` / `versions`, sorted, active marked, the rest kept as `extra`. **Hints** = OUR link for problems we recognise (codes: NOT_BOUND, MANDATORY_FIELD, ID_PLACEHOLDER, TOKEN_FORMAT…; words: 401 → Studio, 404 → publish, "expected float" → Design, ids missing → sample ids, timeout, no-store); a non-2xx HTTP problem stands alone (the missing ids only follow from it) | `agents/jivox-answers.ts` |
+| Service | Submit: connect (MCP URL + readable key; `JIVOX_WRITE_HOSTS`, not set = any) → checklist on the fresh contract → ✗ and not `anyway` → 409 `CHECKLIST_FAILED` (`extra.failed`) → one action per agent (409 `JIVOX_BUSY`) → send → done (outcome from the answer) / error (unreachable · timeout + "Jivox may still finish it" · auth_failed · bad_answer) → verified: the agent's last contract = the submitted one (5.6 out of date vs Jivox). Activate the same. Versions live (`list_contracts`) + `submittedHere` (our record: design version, when, who) + `running`. History pages + one action in full (the document sent, Jivox's answer read again). Agents list: `jivoxActions` (active version, last submit, running) | `agents/jivox-writes.service.ts`, `jivox-actions.ts` (`jivoxSummaries`) |
+| Endpoints | `POST …/agents/:id/jivox/submit { anyway? }` · `GET …/jivox/versions` · `POST …/jivox/versions/:v/activate` · `GET …/jivox/actions?before=&limit=` · `GET …/jivox/actions/:actionId`. A call that reached the point of sending always answers 200 `{ action }` (its record says what happened) | `agents.controller.ts`, `agents.schemas.ts`, `apis.routes.ts` |
+
+**Tests:** `phase-06-task-6.4-answers-lib.test.ts` **25** (the fake's shapes + other plausible ones + nonsense; hints;
+versions; write hosts incl. a look-alike). `phase-06-task-6.4-endpoints.sh` **40** (41 with `SLOW=1`), green twice:
+not connected 409; checklist ✗ 409 naming base_url, nothing sent or recorded; bad body 400; anyway → failed (no Studio
+token; host, design version, who, Jivox's problems + hint "studio") → token set → verified v1, agent up to date with
+the submitted contract, table summary; versions (submitted here, by whom); activate 1; v2 + activate → v1 retired;
+versions list only v2; refused: retired / unknown version (recorded), 0 / abc → 400; unpublished → refused with
+evidence + hint "publish"; **busy**: a second submit / an activate while one waits → 409 saying what runs, the list
+shows it running, another agent fine, the slow one finishes; **6 submits at once → 1 sent, 5 × 409**; history newest
+first, light rows, pages, one in full (document + answer, explained again), another agent's path 404, count = what
+was sent; tool error / HTTP 500 → bad_answer with Jivox's text; wrong key → auth_failed; unreachable (named) and a
+502 for versions; **60 s silence → timeout after ~60 s** (SLOW); design change → out of date vs the SUBMITTED contract
+→ submit → up to date; no token / access key in any answer or stored row; another account 404, logged out 401;
+removing an agent removes its history. Regression: 5.2 56 · 5.5 31 · 5.7 42 · 6.2 32 · 6.3 43; types clean.
+
+| Found while doing it | Fix |
+|---|---|
+| After a 401, the "id appears 0 times" problems added a misleading hint (sample ids) | a non-2xx HTTP problem stands alone |
+| The user's copy: the 6.0 `env.ts` change was applied only half (settings, not the `export const env` block) → `npm run build` fails there (`AUTH_ATTEMPTS_PER_15_MIN` possibly undefined); the dev server still ran (tsx doesn't type-check) | `docs/patches/6.4-your-copy.patch` carries the missing part too; checked on a scratch copy of their backend |

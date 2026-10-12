@@ -2,21 +2,25 @@
 // What 5.0 discovery found on qa3 (docs/phases/phase-05-contract-generator.md §10):
 //   JSON-RPC 2.0 over HTTPS (Streamable HTTP), stateless (no session), answers as SSE or JSON,
 //   auth "Authorization: Bearer <agent's MCP access key>"; tools answer with one text item (JSON).
-// Phase 5 calls ONLY the read-only tools (P5-14); submit / activate come in Phase 6.
+// Phase 5 calls ONLY the read-only tools (P5-14). Phase 6 (task 6.4) adds the two write tools through
+// a separate, explicit callWrite (longer timeout: Jivox calls our API once while it handles a submit).
 // The access key never leaves this module except in the Authorization header, and is scrubbed from
 // every error message.
 
 const READ_ONLY_TOOLS = ['get_canonical_schema', 'get_contract_spec', 'list_contracts'] as const;
 export type ReadOnlyTool = (typeof READ_ONLY_TOOLS)[number];
+const WRITE_TOOLS = ['submit_contract', 'activate_contract'] as const;
+export type WriteTool = (typeof WRITE_TOOLS)[number];
 
 const TIMEOUT_MS = 20_000;
+export const WRITE_TIMEOUT_MS = 60_000; // validation + gates + ONE live call to our API (≤ 3 s) on Jivox's side
 const MAX_ANSWER_BYTES = 2 * 1024 * 1024; // the spec answer is ~16 KB; anything huge is wrong
 const PROTOCOL_VERSION = '2025-06-18';
 
 // Why a call failed, in words for the user (never containing the key).
 export class JivoxMcpError extends Error {
   constructor(
-    public readonly kind: 'unreachable' | 'auth' | 'protocol' | 'tool',
+    public readonly kind: 'unreachable' | 'timeout' | 'auth' | 'protocol' | 'tool',
     message: string,
     options?: { cause?: unknown },
   ) {
@@ -29,7 +33,7 @@ export function createJivoxMcpClient(url: string, accessKey: string) {
   let nextId = 0;
   const scrub = (text: string) => (accessKey ? text.split(accessKey).join('<access key>') : text);
 
-  async function rpc(method: string, params: Record<string, unknown>, notification = false): Promise<unknown> {
+  async function rpc(method: string, params: Record<string, unknown>, notification = false, timeoutMs = TIMEOUT_MS): Promise<unknown> {
     let res: Response;
     try {
       res = await fetch(url, {
@@ -41,13 +45,16 @@ export function createJivoxMcpClient(url: string, accessKey: string) {
           Authorization: `Bearer ${accessKey}`,
         },
         body: JSON.stringify(notification ? { jsonrpc: '2.0', method, params } : { jsonrpc: '2.0', id: ++nextId, method, params }),
-        signal: AbortSignal.timeout(TIMEOUT_MS),
+        signal: AbortSignal.timeout(timeoutMs),
         redirect: 'error', // never follow a redirect elsewhere with the key
       });
     } catch (err) {
       const cause = (err as { cause?: { code?: string; message?: string } }).cause;
+      if ((err as Error).name === 'TimeoutError') {
+        throw new JivoxMcpError('timeout', `Jivox didn't answer within ${timeoutMs / 1000} s.`, { cause: err });
+      }
       // The underlying reason says most: ECONNREFUSED, ENOTFOUND, "bad port", a TLS problem…
-      const reason = (err as Error).name === 'TimeoutError' ? `no answer within ${TIMEOUT_MS / 1000} s` : scrub(cause?.code ?? cause?.message ?? (err as Error).message);
+      const reason = scrub(cause?.code ?? cause?.message ?? (err as Error).message);
       throw new JivoxMcpError('unreachable', `Couldn't reach the Jivox MCP destination (${reason}).`, { cause: err });
     }
     const text = await readLimited(res);
@@ -119,5 +126,22 @@ export function createJivoxMcpClient(url: string, accessKey: string) {
     }
   }
 
-  return { callReadOnly };
+  // A WRITE tool (task 6.4): the answer is returned even when the tool says isError (Jivox's refusals
+  // may come that way and must be recorded and shown), as { isError, value } where value is the parsed
+  // JSON, or the text when it isn't JSON. Transport problems still throw JivoxMcpError.
+  async function callWrite(name: WriteTool, args: Record<string, unknown>, timeoutMs = WRITE_TIMEOUT_MS): Promise<{ isError: boolean; value: unknown }> {
+    if (!WRITE_TOOLS.includes(name)) throw new Error(`Not a write tool: ${name}`);
+    await initialize();
+    const result = (await rpc('tools/call', { name, arguments: args }, false, timeoutMs)) as { content?: { type?: string; text?: string }[]; isError?: boolean } | null;
+    const text = scrub((result?.content ?? []).filter((c) => c.type === 'text').map((c) => c.text ?? '').join(''));
+    let value: unknown = text;
+    try {
+      value = JSON.parse(text);
+    } catch {
+      // plain text: kept as is
+    }
+    return { isError: result?.isError === true, value };
+  }
+
+  return { callReadOnly, callWrite };
 }

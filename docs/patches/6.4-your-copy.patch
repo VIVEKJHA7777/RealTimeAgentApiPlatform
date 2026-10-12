@@ -1,0 +1,44 @@
+--- backend/src/config/env.ts	2026-10-12 11:44:56
++++ backend/src/config/env.ts	2026-10-12 11:44:56
+@@ -66,6 +66,9 @@
+   // The built frontend (frontend/dist) served by this server, so the whole app is one https
+   // address (the login cookie then works without CORS). Not set: ../frontend/dist when it exists.
+   FRONTEND_DIST: z.string().min(1).optional(),
++  // Jivox MCP hosts our app may WRITE to (submit / activate), comma-separated. Not set = any (the
++  // user's choice 2026-10-12, P6-2); e.g. brandstore-data-mcp.qa3.jivox.com to allow qa3 only.
++  JIVOX_WRITE_HOSTS: z.string().trim().max(2000).optional(),
+   // Set by Render on every service ("https://<name>.onrender.com"): the default PUBLIC_BASE_URL there.
+   RENDER_EXTERNAL_URL: z.preprocess(
+     (v) => (typeof v === 'string' && v.trim() === '' ? undefined : v),
+@@ -80,8 +83,10 @@
+   process.exit(1);
+ }
+ 
++const production = parsed.data.NODE_ENV === 'production';
+ export const env = {
+   ...parsed.data,
+-  PUBLIC_BASE_URL: parsed.data.PUBLIC_BASE_URL ?? `http://localhost:${parsed.data.PORT}`,
++  PUBLIC_BASE_URL:
++    parsed.data.PUBLIC_BASE_URL ?? parsed.data.RENDER_EXTERNAL_URL?.replace(/\/+$/, '') ?? `http://localhost:${parsed.data.PORT}`,
++  AUTH_ATTEMPTS_PER_15_MIN: parsed.data.AUTH_ATTEMPTS_PER_15_MIN ?? (production ? 30 : 0),
+ };
+-
+--- backend/.env.example	2026-10-12 11:44:56
++++ backend/.env.example	2026-10-12 11:44:56
+@@ -10,3 +10,16 @@
+ LOG_FILE=logs/app.log
+ # postgresql://USER:PASSWORD@HOST:PORT/DATABASE
+ DATABASE_URL="postgresql://vivekkumarjha@localhost:5432/api-platform-vivek"
++
++# ── Running on a server (task 6.0; see docs/DEPLOY-render-neon.md) ──
++# Who may create an account. Not set: anyone in development, NOBODY in production.
++# "*" = anyone; or emails and "@domain" endings, comma-separated:
++# SIGNUP_ALLOWED_EMAILS=you@jivox.com,@jivox.com
++# Login + sign-up attempts per IP per 15 min (default: 0 = off in development, 30 in production)
++# AUTH_ATTEMPTS_PER_15_MIN=30
++# Proxies in front of the app (Render: 1), so the caller's real IP is used. Local: 0
++# TRUST_PROXY=0
++# The built frontend served by the backend (production does this by itself from ../frontend/dist)
++# FRONTEND_DIST=../frontend/dist
++# Jivox MCP hosts this server may WRITE to (submit / activate), comma-separated. Not set = any host.
++# JIVOX_WRITE_HOSTS=brandstore-data-mcp.qa3.jivox.com

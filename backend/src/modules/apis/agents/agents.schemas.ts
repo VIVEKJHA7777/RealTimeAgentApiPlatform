@@ -104,3 +104,14 @@ export const contractTakenSchema = z.object({
     .loose(),
 });
 export type ContractTakenInput = z.infer<typeof contractTakenSchema>;
+
+// ── Phase 6 (task 6.4): writing to Jivox ──
+// POST …/jivox/submit: `anyway` = send even with ✗ in the checklist (P6-3, for testing Jivox's own checks).
+export const submitSchema = z.object({ anyway: z.boolean('anyway must be true or false').default(false) }).strict();
+// :version in …/jivox/versions/:version/activate
+export const versionParam = z.coerce.number().int('Version must be a whole number').min(1, 'Version must be 1 or more').max(1_000_000);
+// GET …/jivox/actions?before=<id>&limit=20
+export const historyQuery = z.object({
+  before: z.string().min(1).max(100).optional(),
+  limit: z.coerce.number().int().min(1).max(100).optional(),
+});

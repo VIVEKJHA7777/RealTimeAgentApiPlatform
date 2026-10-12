@@ -27,6 +27,7 @@ import { type Tx, withApiLock } from '../tokens/tokens.service.js';
 import { type ContractTakenInput, type CreateAgentInput, MAX_AGENTS_PER_API, type UpdateAgentInput } from './agents.schemas.js';
 import { contractState, loadShapeContext, type ShapeContext, shapeFor } from './contract.js';
 import { canonicalJson, contractShape } from './contract-shape.js';
+import { type JivoxSummary, jivoxSummaries } from './jivox-actions.js';
 
 type AgentRow = JivoxAgent & { token: ApiToken | null };
 
@@ -42,12 +43,13 @@ export type JivoxAgentInfo = {
   contracts: { activeVersion: number | null; versions: unknown[] };
 };
 
-const bindKey = (agentId: string) => `jivox-agent:${agentId}`;
+export const bindKey = (agentId: string) => `jivox-agent:${agentId}`;
 const keyHint = (key: string) => key.slice(-2);
 
 // What the browser may see. Never the access key (only its hint), never the token itself.
 // `shapes`: today's contract shape context (5.6 "out of date"); null = no design yet.
-function toAgentInfo(row: AgentRow, shapes: ShapeContext | null, now = new Date()) {
+// `submits`: what we last saw of its Jivox submits / activations (6.4; the table's Jivox column).
+function toAgentInfo(row: AgentRow, shapes: ShapeContext | null, submits: JivoxSummary | null = null, now = new Date()) {
   const info = row.agentInfo as JivoxAgentInfo | null;
   return {
     id: row.id,
@@ -67,6 +69,7 @@ function toAgentInfo(row: AgentRow, shapes: ShapeContext | null, now = new Date(
     jivox: info && row.agentInfoAt ? { ...info, readAt: row.agentInfoAt } : null,
     lastError: row.lastError,
     contract: contractState(row, shapes ? shapeFor(shapes, row) : null),
+    jivoxActions: submits,
     createdAt: row.createdAt,
     updatedAt: row.updatedAt,
   };
@@ -75,7 +78,7 @@ export type AgentInfo = ReturnType<typeof toAgentInfo>;
 
 const agentNotFound = () => new AppError(404, 'AGENT_NOT_FOUND', 'Agent not found');
 
-async function findAgent(tx: Tx | typeof prisma, api: Api, agentId: string) {
+export async function findAgent(tx: Tx | typeof prisma, api: Api, agentId: string) {
   // Scoped by API: another API's (or brand's) agent id is simply "not found".
   const row = await tx.jivoxAgent.findFirst({ where: { id: agentId, apiId: api.id }, include: { token: true } });
   if (!row) throw agentNotFound();
@@ -116,14 +119,15 @@ async function checkToken(tx: Tx, api: Api, tokenId: string | null | undefined) 
 // GET: the API's agents, oldest first.
 export async function listAgents(api: Api, brandSlug: string) {
   const rows = await prisma.jivoxAgent.findMany({ where: { apiId: api.id }, orderBy: { createdAt: 'asc' }, include: { token: true } });
-  const shapes = await loadShapeContext(api, brandSlug);
+  const [shapes, submits] = await Promise.all([loadShapeContext(api, brandSlug), jivoxSummaries(rows.map((r) => r.id))]);
   const now = new Date();
-  return { agents: rows.map((r) => toAgentInfo(r, shapes, now)), limits: { maxAgents: MAX_AGENTS_PER_API } };
+  return { agents: rows.map((r) => toAgentInfo(r, shapes, submits.get(r.id) ?? null, now)), limits: { maxAgents: MAX_AGENTS_PER_API } };
 }
 
 // One agent as the browser sees it (after a change: compared with the design as it is now).
 async function present(api: Api, brandSlug: string, row: AgentRow) {
-  return toAgentInfo(row, await loadShapeContext(api, brandSlug));
+  const [shapes, submits] = await Promise.all([loadShapeContext(api, brandSlug), jivoxSummaries([row.id])]);
+  return toAgentInfo(row, shapes, submits.get(row.id) ?? null);
 }
 
 // GET one
@@ -272,9 +276,9 @@ function toJivoxInfo(schema: CanonicalSchema, spec: ContractSpec, list: Contract
   };
 }
 
-function mcpFailure(err: JivoxMcpError) {
+export function mcpFailure(err: JivoxMcpError) {
   if (err.kind === 'auth') return new AppError(422, 'JIVOX_AUTH_FAILED', err.message, { cause: err });
-  if (err.kind === 'unreachable') return new AppError(502, 'JIVOX_UNREACHABLE', err.message, { cause: err });
+  if (err.kind === 'unreachable' || err.kind === 'timeout') return new AppError(502, 'JIVOX_UNREACHABLE', err.message, { cause: err });
   return new AppError(502, 'JIVOX_BAD_ANSWER', err.message, { cause: err });
 }
 
