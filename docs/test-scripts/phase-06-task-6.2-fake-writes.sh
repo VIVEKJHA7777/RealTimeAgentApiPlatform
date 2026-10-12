@@ -67,7 +67,7 @@ check "  evidence = the request Jivox sent (our /v1 URL with the sample ids) + o
 echo "2. Token pasted in Studio → verified; every submit is a NEW version"
 control $A1P "{\"studioToken\":\"$TA\"}"
 OUT=$(mcp $A1P submit_contract $T/good1.json)
-check "verified as version 1 (not active yet)" "verified 1 yes" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r '/activate_contract/.test(o.result.message)?"yes":"no"' "$OUT")"
+check "verified as version 1 (not active yet)" "verified 1 yes" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r '/activate_contract/.test(o.result.note)?"yes":"no"' "$OUT")"
 mcp $A1P submit_contract $T/good1.json > $T/v2
 check "the same document again → version 2 (Jivox stores every submit)" "verified 2" "$(r 'o.result.status' "$(cat $T/v2)") $(r 'o.result.version' "$(cat $T/v2)")"
 curl -s -b $T/a "$API/organizations/$S/apis/$P/recent-calls" > $T/rc
@@ -77,9 +77,9 @@ check "list: v1 + v2 verified, none active yet" '[[1,"verified"],[2,"verified"]]
 
 echo "3. Activate: re-checked, then live; the old active one is retired (and never listed again)"
 OUT=$(act $A1P 2)
-check "activate 2 → active, nothing retired" "active 2 null" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'JSON.stringify(o.result.retired)' "$OUT")"
+check "activate 2 → active, nothing was active (previous_active null, like qa3)" "active 2 null" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'JSON.stringify(o.result.previous_active)' "$OUT")"
 OUT=$(act $A1P 1)
-check "activate 1 → active, v2 retired" "active 1 2" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'o.result.retired' "$OUT")"
+check "activate 1 → active, v2 retired (previous_active 2)" "active 1 2" "$(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'o.result.previous_active' "$OUT")"
 check "  list: only v1 (active); retired v2 is gone" '[[1,"active"]] 1' "$(r 'o.result.contracts.map(c=>[c.version,c.status])' "$(mcp $A1P list_contracts)") $(r 'o.result.active_version' "$(mcp $A1P list_contracts)")"
 check "activate the retired v2 / the active v1 / an unknown v99 → refused, each with its reason" "not_verified already_active unknown_version" "$(r 'o.result.reason' "$(act $A1P 2)") $(r 'o.result.reason' "$(act $A1P 1)") $(r 'o.result.reason' "$(act $A1P 99)")"
 
@@ -110,7 +110,7 @@ req a POST "apis/$P/unpublish"
 check "unpublished → submit fails (HTTP 404 from /v1)" "failed yes" "$(OUT=$(mcp $A1P submit_contract $T/good1.json); echo $(r 'o.result.status' "$OUT") $(r 'o.result.evidence.problems.some(p=>p.startsWith("HTTP 404"))?"yes":"no"' "$OUT"))"
 check "  activate a verified version now → refused (the live call is re-run), nothing changed" "refused verification_failed 1" "$(OUT=$(act $A1P 3); echo $(r 'o.result.status' "$OUT") $(r 'o.result.reason' "$OUT")) $(r 'o.result.active_version' "$(mcp $A1P list_contracts)")"
 req a POST "apis/$P/publish"
-check "  published again → activate 3 works; v1 retired" "active 3 1" "$(OUT=$(act $A1P 3); echo $(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'o.result.retired' "$OUT"))"
+check "  published again → activate 3 works; v1 retired" "active 3 1" "$(OUT=$(act $A1P 3); echo $(r 'o.result.status' "$OUT") $(r 'o.result.version' "$OUT") $(r 'o.result.previous_active' "$OUT"))"
 WRONG="rtk_wrong_token_$(openssl rand -hex 16)"
 control $A1P "{\"studioToken\":\"$WRONG\"}"
 OUT=$(mcp $A1P submit_contract $T/good1.json)

@@ -94,7 +94,7 @@ result card (verified v3 ✓ + "Activate v3" / failed ✗ with Jivox's evidence 
 
 ## 8. Open questions
 
-- What does Studio's **Waiting** status mean (we'll see it change in 6.6)?
+- ~~What does Studio's **Waiting** status mean?~~ **Answered (6.6):** after activation Studio shows "success"; Waiting = no active contract yet.
 - Does a live `""` replace an ingested value (Phase 5 §8)?
 - The real answer shapes of `submit_contract` / `activate_contract` (recorded in 6.6).
 
@@ -281,6 +281,22 @@ API `newsubtitle` (brand Amazon), **Agent 1** (bound `sub_category` → key `sub
 pasted in Studio): checklist all ✓ incl. "Jivox can reach the base URL" → **Submit → verified v1** → **Activate v1 →
 activated** ("Version 1 is live") → versions: v1 Active (design v2) → table chip **v1 active**. Our reader understood
 both real answers (exact JSON: now visible as "Jivox's answer (raw)" in each history row → to be copied here).
+
+### Jivox's real answers, read properly (2026-10-12)
+The user copied the raw answers: saved in `docs/jivox/qa3-answers-2026-10-12/` (README + 3 JSON files). **Studio's agent
+status afterwards: "success"** (answers the open question: "Waiting" = no active contract yet). Jivox's verification
+calls came from `python-httpx/0.28.1` and are in our Recent calls (20:40:28 submit, 20:40:33 activate, both 200), and its
+answer says **`cache_control_ok: true`**.
+
+| Real shape | Our reader before | Now |
+|---|---|---|
+| verified: the sentence is in `note` | message missing | `message ?? note` |
+| active: the old version is in `previous_active` | "v… retired" would be missing | `previous_active` (number or `{ version }`) |
+| evidence is `verification { passed, failure, http_status, status_ok, cache_control_ok, id_check, api_errors, fields[{ pass, failure_reason }] }` | not read | evidence = `verification`; when `passed` is false each thing that didn't pass is a problem (codes HTTP_STATUS, STATUS, CACHE_CONTROL, IDS_MISSING, IDS_DUPLICATED, IDS_UNEXPECTED, ITEMS_WITHOUT_ID, API_ERRORS, FIELD) with our hint; a non-2xx stands alone |
+
+The fake now answers verified / active / invalid exactly like qa3 (failed / gate_failed / refused still guessed:
+`verification` with `passed: false` + our evidence). Tests: answers lib **33** (the 3 real answers + a failed
+`verification`), 6.2 32 (`note`, `previous_active`), 6.4 40, 6.6 hyphen 15, 5.7 42.
 
 ### UI improvements after the first real run (2026-10-12, user request: "close the checklist, open it when I want")
 | Part | What | Where |

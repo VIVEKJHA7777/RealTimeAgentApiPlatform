@@ -1,0 +1,1 @@
+{ "status": "invalid", "errors": [ { "code": "BAD_DOCUMENT", "message": "'$.data[*].sub-category' does not match '^\\$\\.data\\[\\*\\]\\.[A-Za-z0-9_]+$'" } ] }

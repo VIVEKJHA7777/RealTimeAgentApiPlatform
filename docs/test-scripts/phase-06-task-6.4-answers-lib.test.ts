@@ -2,6 +2,7 @@
 // Jivox's real write answers are unknown until 6.6, so besides the fake's shapes this feeds other
 // plausible ones (state / result / errors as text / version inside contract) and nonsense.
 //   cd backend && npx tsx ../docs/test-scripts/phase-06-task-6.4-answers-lib.test.ts
+import { readFileSync } from 'node:fs';
 import { hintsFor, readActivate, readSubmit, readVersions } from '../../backend/src/modules/apis/agents/jivox-answers.ts';
 import { writeAllowed } from '../../backend/src/modules/apis/agents/jivox-writes.service.ts';
 
@@ -30,6 +31,19 @@ eq('  hint: a 401 → paste the token in Studio', failed.hints.map((h) => h.plac
 // ── Jivox's FIRST REAL answer (qa3, 2026-10-12): the exact shape it sent ──
 const real = readSubmit({ status: 'invalid', errors: [{ code: 'BAD_DOCUMENT', message: String.raw`'$.data[*].sub-category' does not match '^\$\.data\[\*\]\.[A-Za-z0-9_]+$'` }] });
 eq('real qa3 answer: invalid, one BAD_DOCUMENT problem (no fix from Jivox), our hint → Design tab', [real.outcome, real.problems.map((p) => [p.code, p.fix]), real.hints.map((h) => h.place)], ['invalid', [['BAD_DOCUMENT', null]], ['design']]);
+
+// ── Jivox's real VERIFIED / ACTIVE answers (qa3, 2026-10-12) ──
+const real2 = (f: string) => JSON.parse(readFileSync(new URL(`../jivox/qa3-answers-2026-10-12/${f}`, import.meta.url), 'utf8'));
+const rv = readSubmit(real2('submit-verified.json'));
+eq('real verified: v1, Jivox\'s `note` is the message, `verification` is the evidence, no problems', [rv.outcome, rv.version, rv.message, (rv.evidence as { cache_control_ok: boolean }).cache_control_ok, rv.problems.length], ['verified', 1, 'Call activate_contract(version=1) to make it live.', true, 0]);
+const ra = readActivate(real2('activate-active.json'), 1);
+eq('real active: activated v1, previous_active null → nothing retired', [ra.outcome, ra.version, ra.retired, ra.problems.length], ['activated', 1, null, 0]);
+eq('previous_active as a number / an object → retired', [readActivate({ status: 'active', version: 2, previous_active: 1 }, 2).retired, readActivate({ status: 'active', version: 2, previous_active: { version: 1 } }, 2).retired], [1, 1]);
+const vf = readSubmit({ status: 'failed', verification: { passed: false, failure: 'verification failed', http_status: 200, status_ok: true, cache_control_ok: false, id_check: { missing: ['2'], duplicates: [], unexpected: ['9'], without_id: 1 }, api_errors: [{ error_id: '2' }], fields: [{ column_name: 'current_price', pass: false, failure_reason: '"" is not a float' }, { column_name: 'sub_title', pass: true }] } });
+eq('a failed `verification` → one problem per thing that didn\'t pass', vf.problems.map((p) => p.code), ['VERIFICATION', 'CACHE_CONTROL', 'IDS_MISSING', 'IDS_UNEXPECTED', 'ITEMS_WITHOUT_ID', 'API_ERRORS', 'FIELD']);
+eq('  …with our hints (no-store → settings, missing ids → agent, a field type → design)', vf.hints.map((h) => h.place).sort(), ['agent', 'design', 'settings']);
+eq('  a non-2xx status in `verification` stands alone (the rest follow from it)', readSubmit({ status: 'failed', verification: { passed: false, http_status: 401, status_ok: false, id_check: { missing: ['1', '2'] } } }).hints.map((h) => h.place), ['studio']);
+eq('a passed `verification` adds no problem even with odd flags', readSubmit({ status: 'verified', version: 1, verification: { passed: true, cache_control_ok: false } }).problems, []);
 
 // ── hints ──
 const h = (code: string | null, message: string) => hintsFor([{ code, message, fix: null, path: null }]).map((x) => x.place);

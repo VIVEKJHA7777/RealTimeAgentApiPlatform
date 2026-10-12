@@ -1,10 +1,13 @@
 // Reading Jivox's answers to submit_contract / activate_contract / list_contracts (task 6.4). Pure:
 // docs/test-scripts/phase-06-task-6.4-answers-lib.test.ts.
 //
-// Nobody has seen Jivox's real write answers yet (no write was ever made; 6.6 records them), so the
-// reading is LOOSE: the status may sit in `status` / `state` / `result`, the version in `version` /
-// `contract.version`, the problems in `errors` / `evidence.problems` … Anything we don't recognise
-// becomes outcome "unknown" with Jivox's own word kept, and the raw answer is always stored and shown.
+// Jivox's REAL answers (qa3, 2026-10-12: docs/jivox/qa3-answers-2026-10-12/): submit → { status:
+// "verified" | "invalid", version, note, contract, recorded, verification, errors[{ code, message }] };
+// activate → { status: "active", version, contract, verification, previous_active }. `verification` =
+// { passed, failure, http_status, status_ok, cache_control_ok, sent_ids, echoed_ids, id_check, api_errors,
+// fields[{ column_name, pass, failure_reason }] }. A real FAILED answer hasn't been seen yet, so the
+// reading stays LOOSE (other spellings / keys still work); anything unrecognised becomes "unknown" with
+// Jivox's own word kept, and the raw answer is always stored and shown.
 // Hints add OUR link to the place to fix a problem we recognise (P6-7); Jivox's words come first.
 import type { FixPlace } from './contract-check.js';
 
@@ -53,7 +56,35 @@ function problemsOf(a: Obj): JivoxProblem[] {
   for (const key of ['errors', 'problems', 'issues', 'violations']) if (Array.isArray(a[key])) (a[key] as unknown[]).slice(0, 50).forEach(add);
   const ev = obj(a.evidence);
   if (Array.isArray(ev.problems)) (ev.problems as unknown[]).slice(0, 50).forEach(add);
+  list.push(...verificationProblems(a.verification));
   return list;
+}
+
+// Jivox's `verification` (its live call to our API): only what did NOT pass becomes a problem.
+function verificationProblems(value: unknown): JivoxProblem[] {
+  const v = obj(value);
+  if (Object.keys(v).length === 0 || v.passed === true) return [];
+  const out: JivoxProblem[] = [];
+  const add = (code: string, message: string) => out.push({ code, message, fix: null, path: null });
+  const ids = (x: unknown) => (Array.isArray(x) ? x.slice(0, 10).map(String).join(', ') : '');
+  const http = typeof v.http_status === 'number' ? v.http_status : null;
+  if (http !== null && (http < 200 || http >= 300)) add('HTTP_STATUS', `HTTP ${http}: expected 2xx.`);
+  if (v.status_ok === false) add('STATUS', 'The answer\'s status isn\'t "success".');
+  if (v.cache_control_ok === false) add('CACHE_CONTROL', 'Cache-Control: no-store is missing.');
+  const idc = obj(v.id_check);
+  if (Array.isArray(idc.missing) && idc.missing.length) add('IDS_MISSING', `Ids sent but missing from the answer: ${ids(idc.missing)} (appears 0 times).`);
+  if (Array.isArray(idc.duplicates) && idc.duplicates.length) add('IDS_DUPLICATED', `Ids that appear more than once: ${ids(idc.duplicates)}.`);
+  if (Array.isArray(idc.unexpected) && idc.unexpected.length) add('IDS_UNEXPECTED', `Ids in the answer that weren't asked for: ${ids(idc.unexpected)}.`);
+  if (typeof idc.without_id === 'number' && idc.without_id > 0) add('ITEMS_WITHOUT_ID', `${idc.without_id} item(s) without an id.`);
+  if (Array.isArray(v.api_errors) && v.api_errors.length) add('API_ERRORS', `Our answer listed errors for: ${v.api_errors.slice(0, 10).map((e) => (typeof e === 'string' ? e : String(obj(e).error_id ?? JSON.stringify(e)))).join(', ')}.`);
+  if (Array.isArray(v.fields)) {
+    for (const f of v.fields.map(obj)) {
+      if (f.pass === false) add('FIELD', `${str(f.column_name) ?? 'A field'}: ${str(f.failure_reason) ?? 'not of its type (or its default)'}.`);
+    }
+  }
+  const failure = typeof v.failure === 'string' ? v.failure : v.failure ? JSON.stringify(v.failure) : null;
+  if (failure && !out.some((p) => p.message.includes(failure))) out.unshift({ code: 'VERIFICATION', message: failure, fix: null, path: null });
+  return out;
 }
 
 // OUR link for problems we recognise (by code first, then by words). Each place at most once.
@@ -67,6 +98,11 @@ const BY_CODE: Record<string, Hint> = {
   ID_PLACEHOLDER: { text: 'The request template\'s {item_id}: fix it on the Design tab (How Jivox calls it).', place: 'design' },
   BAD_META: { text: 'A context value in the request template isn\'t allowed: fix it on the Design tab.', place: 'design' },
   BAD_MAX_IDS: { text: 'Max ids per call: fix it on the Design tab (1–100).', place: 'design' },
+  // from Jivox's `verification` (our codes, verificationProblems below)
+  FIELD: { text: 'A value isn\'t of the type Jivox expects: change the type (or its column, or set a default) on the Design tab.', place: 'design' },
+  CACHE_CONTROL: { text: 'The answer lacked Cache-Control: no-store (our API always sends it: check a proxy in between).', place: 'settings' },
+  IDS_MISSING: { text: 'An id Jivox sent got no answer: use sample ids that exist in your data (Edit the agent), and check the id key.', place: 'agent' },
+  ITEMS_WITHOUT_ID: { text: 'Some items have no id: check the id key on the Design tab.', place: 'design' },
   TOKEN_FORMAT: { text: 'The token header format: switch the header style on the Test tab (X-Api-Key or Bearer).', place: 'tokens' },
   BAD_BASE_URL: { text: 'The base URL: set PUBLIC_BASE_URL to the public https address.', place: 'settings' },
 };
@@ -76,7 +112,7 @@ const BY_WORDS: [RegExp, Hint][] = [
   [/\b401\b|unauthori[sz]ed|missing token|token/i, { text: 'Our API refused Jivox\'s token: paste this agent\'s token in Studio (Real-time data → the agent → ACCESS KEYS → Agent access token).', place: 'studio' }],
   [/\b404\b|not published|not found/i, { text: 'Our API answered 404: publish the API (Overview) and check its address.', place: 'publish' }],
   [/expected (float|int|boolean|string|image)|type/i, { text: 'A value isn\'t of the type Jivox expects: change the type (or its column) on the Design tab.', place: 'design' }],
-  [/appears 0 times|not found once|missing id|sample/i, { text: 'An id Jivox sent got no answer: use sample ids that exist in your data (Edit the agent), and check the id key.', place: 'agent' }],
+  [/appears 0 times|not found once|missing id|missing from the answer|sample/i, { text: 'An id Jivox sent got no answer: use sample ids that exist in your data (Edit the agent), and check the id key.', place: 'agent' }],
   [/no answer within|timed? ?out|timeout/i, { text: 'Our API answered too slowly for Jivox (3 s): check the live server is awake (the pinger) and not overloaded.', place: 'settings' }],
   [/could not reach|ECONN|ENOTFOUND|reach/i, { text: 'Jivox couldn\'t reach our API: check the public address (Render) is up.', place: 'settings' }],
   [/no-store|cache-control/i, { text: 'The answer lacked Cache-Control: no-store (our API always sends it: check a proxy in between).', place: 'settings' }],
@@ -109,7 +145,7 @@ export function readSubmit(answer: unknown): SubmitReading {
   const problems = problemsOf(a);
   // "verified" without a version number is not something we can act on: keep it as unknown.
   const final = outcome === 'verified' && version === null ? 'unknown' : outcome;
-  return { outcome: final, jivoxStatus: status, version: final === 'verified' ? version : null, message: str(a.message), problems, evidence: a.evidence ?? null, hints: hintsFor(problems) };
+  return { outcome: final, jivoxStatus: status, version: final === 'verified' ? version : null, message: str(a.message) ?? str(a.note), problems, evidence: a.evidence ?? a.verification ?? null, hints: hintsFor(problems) };
 }
 
 export function readActivate(answer: unknown, asked: number): ActivateReading {
@@ -127,10 +163,10 @@ export function readActivate(answer: unknown, asked: number): ActivateReading {
     outcome,
     jivoxStatus: status,
     version: int(a.version) ?? asked,
-    retired: int(a.retired) ?? int(a.previous_version) ?? int(obj(a.retired).version),
-    message: str(a.message),
+    retired: int(a.retired) ?? int(a.previous_active) ?? int(obj(a.previous_active).version) ?? int(a.previous_version) ?? int(obj(a.retired).version),
+    message: str(a.message) ?? str(a.note),
     problems,
-    evidence: a.evidence ?? null,
+    evidence: a.evidence ?? a.verification ?? null,
     hints: hintsFor(problems),
   };
 }

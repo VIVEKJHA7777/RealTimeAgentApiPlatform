@@ -8,10 +8,11 @@
 //              failed (+ evidence). Every submit is recorded; only verified ones get a version.
 //   list     → the verified versions (oldest first) + the active one. Failed and retired: never listed.
 //   activate → only a verified version; gates + live call again; the old active one → retired (final).
-// The ANSWER SHAPES are our best guess (Jivox's real ones are unknown until task 6.6 records them):
-//   { status: 'verified', version, message } · { status: 'invalid' | 'gate_failed', errors: [{ code, path?, message, fix }] }
-//   { status: 'failed', step: 'verification', evidence: { request, response, problems[] } }
-//   { status: 'active', version, retired } · { status: 'refused', reason, message, evidence? }
+// ANSWER SHAPES: verified + active + invalid as Jivox sent them on qa3 (2026-10-12,
+// docs/jivox/qa3-answers-2026-10-12/): { note, status: 'verified', version, contract, recorded, verification }
+// · { status: 'active', version, contract, created_at, updated_at, verification, previous_active }
+// · { status: 'invalid', errors: [{ code, message }] }. Still guessed: gate_failed, failed (+ our
+// evidence next to `verification`), refused.
 // Test-only control (POST /__control, same Bearer key): { path, studioToken?, submit?, activate?, reset? }
 //   submit / activate: '' (real behaviour) | 'tool-error' | 'http500' | 'slow' (5 s, then real) | 'hang' (90 s)
 //   GET /__state?path=… → the agent's versions + every call, for tests.
@@ -126,7 +127,7 @@ export function createWrites(schema) {
       res = await fetch(url, { method: doc.request.method, headers, body, signal: AbortSignal.timeout(VERIFY_TIMEOUT_MS), redirect: 'manual' });
     } catch (e) {
       problems.push(e.name === 'TimeoutError' ? `No answer within ${VERIFY_TIMEOUT_MS} ms.` : `Could not reach the API: ${e.cause?.code ?? e.message}.`);
-      return { ok: false, evidence: { request, response: null, problems } };
+      return { ok: false, evidence: { request, response: null, problems }, verification: { url: url.toString().split('?')[0], method: doc.request.method, passed: false, failure: problems[0], http_status: null } };
     }
     const ms = Date.now() - started;
     const text = await res.text();
@@ -153,7 +154,19 @@ export function createWrites(schema) {
         }
       }
     }
-    return { ok: problems.length === 0, evidence: { request, response, problems } };
+    // Jivox's real shape (qa3, 2026-10-12): the same facts as `verification`.
+    const sent = sentIds(doc);
+    const echoed = data.map((item) => String(item?.[idKey]));
+    const verification = {
+      url: url.toString().split('?')[0], method: doc.request.method, passed: problems.length === 0, failure: problems[0] ?? null,
+      http_status: res.status, status_ok: json?.status === 'success', cache_control_ok: /\bno-store\b/i.test(res.headers.get('cache-control') ?? ''),
+      sent_ids: sent, echoed_ids: echoed,
+      id_check: { missing: sent.filter((id) => !echoed.includes(id)), duplicates: [...new Set(echoed.filter((id, i) => echoed.indexOf(id) !== i))], unexpected: echoed.filter((id) => !sent.includes(id)), without_id: data.filter((item) => item?.[idKey] === undefined).length },
+      api_errors: Array.isArray(json?.errors) ? json.errors.map((e) => e?.error_id) : [],
+      fields: outputs.map((f) => { const p = problems.find((x) => x.startsWith(`${f.column_name} at`)); return { column_name: f.column_name, pass: !p, failure_reason: p ?? null }; }),
+      test_user_token: 'used once and discarded; not stored, not logged',
+    };
+    return { ok: problems.length === 0, evidence: { request, response, problems }, verification };
   }
 
   const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -181,10 +194,11 @@ export function createWrites(schema) {
       const gated = gates(doc, bound);
       if (gated.length) return record({ status: 'gate_failed', errors: gated, message: 'The contract does not fit this agent. Fix each error and submit again.' });
       const v = await verify(doc, a.studioToken);
-      if (!v.ok) return record({ status: 'failed', step: 'verification', evidence: v.evidence, message: 'The live verification call failed. Read the evidence, fix the API or the document, and submit again.' });
+      // failed: the real shape is not known yet (guess: verification + our evidence); verified: as qa3 sent it.
+      if (!v.ok) return record({ status: 'failed', step: 'verification', note: 'The live verification call failed. Read the evidence, fix the API or the document, and submit again.', verification: v.verification, evidence: v.evidence });
       const version = a.next++;
       a.versions.push({ version, status: 'verified', document: doc, created_at: new Date().toISOString() });
-      return record({ status: 'verified', version, message: `Verified as version ${version}. Call activate_contract with version ${version} to make it live.` });
+      return record({ note: `Call activate_contract(version=${version}) to make it live.`, status: 'verified', version, contract: doc, recorded: true, verification: v.verification });
     },
 
     list(path) {
@@ -211,11 +225,12 @@ export function createWrites(schema) {
       const gated = gates(target.document, bound);
       if (gated.length) return record({ status: 'refused', reason: 'gate_failed', errors: gated, message: 'The version no longer fits the agent.' });
       const v = await verify(target.document, a.studioToken);
-      if (!v.ok) return record({ status: 'refused', reason: 'verification_failed', evidence: v.evidence, message: 'The live verification call failed again; nothing changed.' });
+      if (!v.ok) return record({ status: 'refused', reason: 'verification_failed', verification: v.verification, evidence: v.evidence, message: 'The live verification call failed again; nothing changed.' });
       const previous = a.versions.find((x) => x.status === 'active');
       if (previous) previous.status = 'retired';
       target.status = 'active';
-      return record({ status: 'active', version: target.version, retired: previous?.version ?? null, message: `Version ${target.version} is now active.` });
+      // as qa3 sent it (previous_active: null when nothing was active; a number is our guess otherwise)
+      return record({ status: 'active', version: target.version, contract: target.document, created_at: target.created_at, updated_at: new Date().toISOString(), verification: v.verification, previous_active: previous?.version ?? null });
     },
 
     has: (path) => agents.has(path) && agents.get(path).versions.length + agents.get(path).calls.length > 0,
