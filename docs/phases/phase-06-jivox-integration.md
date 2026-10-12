@@ -1,6 +1,6 @@
 # Phase 6: Submit and activate contracts in Jivox (per agent)
 
-**Status:** 🔄 6.0–6.6 done (real qa3: verified, activated, a deliberate failure) (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
+**Status:** 🔄 6.0–6.6 done; 6.7 end-to-end ✅, waiting only for the qa3 two-agents-on-one-API check (the user). Summary: §6.8 (deploy prep, live on Render, fake Jivox writes). **Plan approved 2026-10-12** with the user's choices (P6-2 any https host, P6-3 Submit anyway allowed); the Render deploy is live (user) → 6.1 check next. Real qa3 writes (6.6) still one by one with the user's OK.
 **Roadmap:** [../ROADMAP.md](../ROADMAP.md) · **Big picture:** [../PLAN-v2-api-first.md](../PLAN-v2-api-first.md)
 **Depends on:** Phase 5 (agents, contracts, checklist, out of date) · the Render deploy (a public https address)
 
@@ -334,3 +334,45 @@ types + lint clean.
   DYNAMIC`). Next: did the call reach us (Recent calls / Render log), Render asleep or restarting, or which "Agent 2"?
 - "The Jivox section needed a reload": not reproduced (agent added with a key, or a key added by Edit, both fine);
   most likely a tab opened before the 6.5 deploy. Proposed: an "app updated → Reload" bar.
+
+## 6.7 End to end 🔄 (2026-10-12; the qa3 two-agent check is the user's step)
+
+**Script:** `docs/test-scripts/phase-06-task-6.7-end-to-end.sh`: **21 checks** with `LOG_FILE` (20 without), green 3
+runs. One API, TWO agents, each on its own fake Jivox (own access key, own token "in Studio"; answers shaped like qa3):
+
+| # | Step | What it proves |
+|---|---|---|
+| 1 | Submit | checklist ✗ → 409, nothing sent; anyway → both **verified v1, each with only its fields**, each on its own Jivox; Jivox's `note` shown; both contracts call the same URL |
+| 2 | Activate both | `previous_active` null; summaries v1 active; contracts up to date vs the SUBMITTED ones; versions "submitted here" |
+| 3 | Design change on B's field | only B out of date ("current_price: key price → amount"); B v2 → activate → **v1 retired**, only v2 listed; A untouched |
+| 4 | Deliberate failure (A) | failed, no version, ONE line + hint "Edit the agent"; A's v1 still active |
+| 5 | One at a time | 4 submits at once on A → 1 sent, 3 × 409; B's submit meanwhile fine |
+| 6 | History | newest first, every kind; one in full = the contract sent + the raw answer (qa3 shape); another agent's path 404 |
+| 7 | Recent calls | the verification calls are there with each agent's token name |
+| 8 | Secrets | none in answers, stored actions, or the run's backend log |
+| 9 | Remove B | only B's history goes; A still v1 active |
+
+**On qa3 (the user, like 6.6):** a second Studio agent on the SAME API (another bound field), submitted + activated:
+each agent's contract with only its fields, both on the same URL, Studio "success" for both. → then Phase 6 ✅.
+
+## 6.8 Phase 6 summary
+
+**What exists now:** the app is **deployed** (Render + Neon, `https://api-platform-phnn.onrender.com`; sign-up allowlist,
+attempt limit, ping) and **talks to Jivox**: per agent, **Submit** (fresh contract, checklist first, "Submit anyway" for
+testing Jivox's own checks, the host named) → Jivox's answer explained (its words, our fix links, evidence, raw answer)
+→ **Versions** live from Jivox → **Activate** (confirm; the old one retired) → **History** of every action (what was
+sent, Jivox's answer, who, when). One action per agent at a time; a restart can't leave one stuck. Writes may go to any
+https host (`JIVOX_WRITE_HOSTS` to restrict).
+
+**Proven on qa3 (6.6):** invalid (BAD_DOCUMENT) → fixed our key rule; verified v1 → activated → Studio "success";
+Jivox's verification reached us with `cache_control_ok: true`; a deliberate failure explained, the active version
+untouched. All four real answer shapes: `docs/jivox/qa3-answers-2026-10-12/`.
+
+**Decisions:** P6-1…P6-9 (§4) with the user's choices (any https host; Submit anyway). **Learned from Jivox:** keys in
+`at` only `[A-Za-z0-9_]`; answers carry `note`, `previous_active`, `verification`; "Waiting" in Studio = no active
+contract yet. **Still guessed:** gate_failed and a refused activation (never seen for real).
+
+**Proposed, not built:** Recent calls keep the response headers (no-store proof per call), no `ETag` on `/v1`, an
+"app updated → Reload" bar, `SIGNUP_ALLOWED_EMAILS` back to a list on the company server.
+
+**Tests:** 6.0 10 + 19 · 6.2 32 · 6.3 43 · 6.4 25→34 + 40 · 6.5 9→13 · 6.6 15 · 6.7 21.

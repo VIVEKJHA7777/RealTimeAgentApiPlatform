@@ -25,6 +25,7 @@ model User {
   sessions      Session[]
   organizations Organization[]
   jivoxActions  JivoxContractAction[]
+  testSwitches  ApiTestSwitch[]
 
   @@map("users")
 }
@@ -227,6 +228,8 @@ model Api {
   tokens       ApiToken[]
   recentCalls  ApiRecentCalls?
   jivoxAgents  JivoxAgent[]
+  callLogs     ApiCallLog[]
+  testSwitches ApiTestSwitch[]
 
   @@unique([organizationId, slug])
   @@index([dataSourceId])
@@ -256,8 +259,9 @@ model ApiToken {
   updatedAt      DateTime  @updatedAt @map("updated_at") @db.Timestamptz(3)
 
   // Deleting an API deletes its tokens (they could never be used again anyway).
-  api         Api          @relation(fields: [apiId], references: [id], onDelete: Cascade)
-  jivoxAgents JivoxAgent[]
+  api          Api             @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  jivoxAgents  JivoxAgent[]
+  testSwitches ApiTestSwitch[]
 
   @@unique([id, apiId]) // lets an agent point at "a token of THIS API" (composite foreign key)
   @@index([apiId, createdAt]) // the API's token list, oldest first
@@ -349,4 +353,74 @@ model JivoxContractAction {
 
   @@index([agentId, startedAt(sort: Desc)]) // an agent's history, newest first
   @@map("jivox_contract_actions")
+}
+
+// Phase 7 (task 7.1): the call log. Every /v1 call to an API (and every test-switch change, as an
+// audit line), newest first; the newest 500 per API are kept (trimmed after each batch is written).
+// Written AFTER the answer has gone out, in batches (7.2): never on Jivox's 3 s budget.
+// Never stored: token headers / cookies (removed), token-shaped text (scrubbed); bodies ≤ 4 KB.
+model ApiCallLog {
+  id              BigInt   @id @default(autoincrement()) // order + trimming (bigger = newer)
+  apiId           String   @map("api_id")
+  kind            String   @default("call") // call | switch (a switch turned on / off / ended)
+  at              DateTime @db.Timestamptz(3) // when the call arrived (or the switch changed)
+  // ── the request (kind = call) ──
+  method          String?
+  path            String? // path + query as sent, scrubbed (≤ 2 KB)
+  query           Json? // the query parameters (scrubbed)
+  body            String? // the first 4 KB as sent (scrubbed)
+  bodyBytes       Int      @default(0) @map("body_bytes")
+  requestHeaders  Json?    @map("request_headers") // without authorization / x-api-key / cookie
+  tokenKind       String?  @map("token_kind") // this_api | other_api | unknown | not_checked | none
+  tokenName       String?  @map("token_name") // never the token
+  tokenId         String?  @map("token_id") // which token of this API (no link: the log is history) 7.3
+  header          String? // x_api_key | bearer: where the token was sent
+  ids             String[] @default([]) // the first 100
+  idCount         Int?     @map("id_count")
+  meta            Json? // the _meta values that came in (locale, userLocation)
+  requestCheck    Json?    @map("request_check") // the request compared with the template (7.2)
+  // ── our answer ──
+  status          Int? // HTTP status; null = the caller hung up first
+  envelopeStatus  String?  @map("envelope_status") // success | failure
+  errorCodes      String[] @default([]) @map("error_codes")
+  found           Int?
+  responseHeaders Json?    @map("response_headers") // as SENT (proof of Cache-Control: no-store)
+  responseBody    String?  @map("response_body") // the first 4 KB
+  durationMs      Float?   @map("duration_ms")
+  switches        String[] @default([]) // the test switches that changed this answer
+  // ── who ──
+  ip              String?
+  userAgent       String?  @map("user_agent")
+  // ── kind = switch ──
+  event           Json? // { action: on | off | ended, switch, scope, by }
+
+  api Api @relation(fields: [apiId], references: [id], onDelete: Cascade)
+
+  @@index([apiId, id(sort: Desc)]) // an API's log, newest first (and the trimming)
+  @@map("api_call_logs")
+}
+
+// Phase 7 (task 7.1): a test switch makes /v1 answer wrongly on purpose (QA: does Jivox catch it?).
+// At most one per API per kind. Scope: the whole API, or only calls with ONE token (= one agent;
+// a token of THIS API: composite key). It ends by itself (ends_at, at most 24 h after it was set).
+// The app's own checklist / Try it / self-check are left alone unless apply_to_own_checks (P7-3).
+model ApiTestSwitch {
+  id               String   @id @default(cuid())
+  apiId            String   @map("api_id")
+  kind             String // see the CHECK in the migration
+  options          Json     @default("{}") // { field } wrong_type · { ms } slow · { status } http_status
+  tokenId          String?  @map("token_id") // null = every caller
+  applyToOwnChecks Boolean  @default(false) @map("apply_to_own_checks")
+  endsAt           DateTime @map("ends_at") @db.Timestamptz(3)
+  createdById      String?  @map("created_by_id")
+  createdAt        DateTime @default(now()) @map("created_at") @db.Timestamptz(3)
+  updatedAt        DateTime @updatedAt @map("updated_at") @db.Timestamptz(3)
+
+  api       Api       @relation(fields: [apiId], references: [id], onDelete: Cascade)
+  // NoAction: tokens only go away with their API (which removes its switches in the same statement).
+  token     ApiToken? @relation(fields: [tokenId, apiId], references: [id, apiId], onDelete: NoAction)
+  createdBy User?     @relation(fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([apiId, kind])
+  @@map("api_test_switches")
 }

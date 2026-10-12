@@ -150,7 +150,7 @@ with `no-store`, ready-made curl, "Try it" panel, self-check of all Jivox verifi
 contract/1 JSON built from the API design with real sample ids; rule checklist; copy/download.
 *Done when:* the generated contract for a GET and a POST API pass the checklist.
 
-**Phase 6: Public URL + Jivox MCP integration**
+**Phase 6: Public URL + Jivox MCP integration** ✅ nearly (deployed on Render; submit / activate per agent proven on qa3; the two-agent qa3 check pending)
 cloudflared tunnel; per-API Jivox connection (MCP URL + encrypted agent access key); read the
 agent's bound fields; submit_contract, get_contracts, activate_contract; history.
 *Done when:* a contract is submitted, **verified** and activated on qa3 from our UI.

@@ -28,6 +28,8 @@ import { checkRequest, defaultRequest, type RequestSummary } from '../apis/desig
 import { getFeedSchema } from '../jivox/feed-schemas.js';
 import { V1Error } from './envelope.js';
 import type { CallNote } from './recent-calls.js';
+import { checkCall } from './request-check.js';
+import { applyToBody, httpStatusFailure, inScope, on, strictFailure, type Envelope, type LiveSwitch, type SwitchState } from './test-switches.js';
 
 const HEADER_TEXT = {
   x_api_key: 'X-Api-Key: <token>',
@@ -62,6 +64,7 @@ type Resolved = {
   design_version: number;
   data_source_id: string;
   id_column: string;
+  switches: LiveSwitch[]; // the API's test switches still on (7.4), whatever their scope
 };
 
 const unauthorized = (message: string) => new V1Error(401, 'UNAUTHORIZED', message);
@@ -81,7 +84,9 @@ async function resolveToken(req: Request, brandSlug: string, apiSlug: string, no
     SELECT t.id AS token_id, t.name AS token_name, t.revoked_at, t.expires_at, t.last_used_at,
            a.id AS api_id, a.slug AS api_slug, o.slug AS brand_slug, a.status::text AS status,
            a.auth_header::text AS auth_header, a.feed_type::text AS feed_type,
-           a.design, a.design_version, d.id AS data_source_id, d.id_column
+           a.design, a.design_version, d.id AS data_source_id, d.id_column,
+           COALESCE((SELECT json_agg(json_build_object('kind', s.kind, 'options', s.options, 'tokenId', s.token_id, 'own', s.apply_to_own_checks))
+                     FROM api_test_switches s WHERE s.api_id = a.id AND s.ends_at > now()), '[]'::json) AS switches
     FROM api_tokens t
     JOIN apis a ON a.id = t.api_id
     JOIN organizations o ON o.id = a.organization_id
@@ -93,7 +98,7 @@ async function resolveToken(req: Request, brandSlug: string, apiSlug: string, no
     if (note) note.tokenKind = 'other_api'; // recorded on the API of the URL, without the name
     throw unauthorized("This token belongs to a different API, or this API's address has changed. Check the URL and use a token made for this API.");
   }
-  if (note) Object.assign(note, { apiId: row.api_id, tokenKind: 'this_api', tokenName: row.token_name });
+  if (note) Object.assign(note, { apiId: row.api_id, tokenKind: 'this_api', tokenName: row.token_name, tokenId: row.token_id });
   if (row.revoked_at) throw unauthorized('This token was revoked. Use an active token of this API.');
   if (row.expires_at && row.expires_at <= now) {
     const when = row.expires_at.toISOString().replace(/:\d{2}\.\d{3}Z$/, ' UTC').replace('T', ' ');
@@ -193,22 +198,33 @@ export async function answerIds(api: RuntimeApi, dataSourceId: string, idColumn:
 }
 
 // ── The whole call ──
-export async function answerCall(req: Request, brandSlug: string, apiSlug: string, note?: CallNote) {
+// `switches` (7.4): filled with the test switches that apply to this call (a working token of this
+// API, in scope); sendV1 and the call log read it. Order: see test-switches.ts.
+export async function answerCall(req: Request, brandSlug: string, apiSlug: string, note?: CallNote, switches?: SwitchState) {
   const now = new Date();
   const row = await resolveToken(req, brandSlug, apiSlug, now, note);
-  if (req.get(SELF_CHECK_HEADER.name) !== SELF_CHECK_HEADER.value) noteTokenUse(row, now);
+  const ownCheck = req.get(SELF_CHECK_HEADER.name) === SELF_CHECK_HEADER.value;
+  if (!ownCheck) noteTokenUse(row, now);
+  if (switches) switches.active = row.switches.filter((sw) => inScope(sw, row.token_id, ownCheck));
+  const statusSwitch = switches && httpStatusFailure(switches);
+  if (statusSwitch) throw statusSwitch;
 
   if (row.status !== 'published' || !row.design) {
     throw new V1Error(404, 'NOT_FOUND', "This API isn't published yet. Publish it on its Test tab.");
   }
   const api: RuntimeApi = { id: row.api_id, feedType: row.feed_type, design: row.design, designVersion: row.design_version };
   const { request, summary } = requestOf(api);
+  if (note) note.template = { request, summary }; // the call log's request check (7.2), after answering
   if (req.method !== summary.method) {
     throw new V1Error(405, 'METHOD_NOT_ALLOWED', `This API is called with ${summary.method}.`, { Allow: summary.method });
+  }
+  if (switches && on(switches, 'strict')) {
+    const strict = strictFailure(switches, checkCall(request, summary, req.method, req.query as Record<string, unknown>, req.body).check);
+    if (strict) throw strict;
   }
   const ids = extractIds(summary, request.maxIdsPerCall, req.query as Record<string, unknown>, req.body);
   if (note) note.ids = ids;
   const { response, rowsById } = await answerIds(api, row.data_source_id, row.id_column, ids, now);
   if (note) note.found = rowsById.size;
-  return response;
+  return switches ? applyToBody(switches, response as Envelope, ids, api.design) : response;
 }

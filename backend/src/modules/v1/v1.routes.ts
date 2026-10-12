@@ -3,8 +3,9 @@
 // answer, including invalid JSON, too-large bodies, unknown paths and crashes, is a contract
 // envelope with Cache-Control: no-store (P4-6).
 import express, { Router, type NextFunction, type Request, type Response } from 'express';
-import { sendFailure, setV1Headers, V1Error } from './envelope.js';
+import { sendFailure, sendV1, V1Error } from './envelope.js';
 import { callNote, keepBody, recordCalls } from './recent-calls.js';
+import { newSwitchState } from './test-switches.js';
 import { answerCall } from './v1.service.js';
 
 export const v1Router = Router();
@@ -16,9 +17,10 @@ v1Router.use(recordCalls);
 v1Router.use(express.json({ limit: '1mb', type: () => true, verify: (_req, res, buf) => keepBody(res as Response, buf) }));
 
 v1Router.all('/:brandSlug/:apiSlug', async (req: Request, res: Response) => {
-  const response = await answerCall(req, String(req.params.brandSlug), String(req.params.apiSlug), callNote(res));
-  setV1Headers(res);
-  res.status(200).json(response);
+  // The test switches of this call (7.4), also read by sendV1 on failures and by the call log.
+  const switches = (res.locals.v1Switches = newSwitchState());
+  const response = await answerCall(req, String(req.params.brandSlug), String(req.params.apiSlug), callNote(res), switches);
+  sendV1(res, 200, response);
 });
 
 // Anything else under /v1 (e.g. /v1/brand-only).

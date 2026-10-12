@@ -1,5 +1,5 @@
 import { ChevronRight, SearchX } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useParams } from 'react-router'
 import { ApiActions } from '@/components/apis/api-page/ApiActions'
 import type { ApiPageContext } from '@/components/apis/api-page/context'
@@ -23,12 +23,14 @@ import { cn } from '@/lib/utils'
 //   /brands/:slug/apis/:apiSlug/design Design (task 3.7)
 //   /brands/:slug/apis/:apiSlug/test   Test (Phase 4: tokens 4.6; calling + publish 4.7)
 //   /brands/:slug/apis/:apiSlug/jivox  Jivox (Phase 5: Real Time Agents + their contracts, 5.5)
+//   /brands/:slug/apis/:apiSlug/logs   Logs (Phase 7: every call to the live URL, 7.5)
 const TABS = [
   { label: 'Overview', to: '', ready: true },
   { label: 'Data', to: 'data', ready: true },
   { label: 'Design', to: 'design', ready: true },
   { label: 'Test', to: 'test', ready: true },
   { label: 'Jivox', to: 'jivox', ready: true },
+  { label: 'Logs', to: 'logs', ready: true },
 ]
 
 // The frame of every API page tab: loads the API + its data once, shows the header with the
@@ -120,6 +122,12 @@ export function ApiPage() {
 }
 
 function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContext, 'readinessChanged' | 'readinessTick'>) {
+  // On a phone the tab strip scrolls sideways: keep the open tab in view (Logs is the 6th, 7.5).
+  const { pathname } = useLocation()
+  const tabStrip = useRef<HTMLElement>(null)
+  useEffect(() => {
+    tabStrip.current?.querySelector('[aria-current="page"]')?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }, [pathname])
   const [readinessTick, setReadinessTick] = useState(0)
   const context: ApiPageContext = {
     organization,
@@ -168,7 +176,7 @@ function ApiFrame({ organization, api, dataSource, refresh }: Omit<ApiPageContex
         </div>
       </header>
 
-      <nav aria-label="API sections" className="-mb-4 flex gap-1 overflow-x-auto border-b">
+      <nav ref={tabStrip} aria-label="API sections" className="-mb-4 flex gap-1 overflow-x-auto border-b">
         {TABS.map((tab) =>
           tab.ready ? (
             <NavLink

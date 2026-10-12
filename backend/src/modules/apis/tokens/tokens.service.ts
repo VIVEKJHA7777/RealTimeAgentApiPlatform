@@ -149,6 +149,8 @@ export async function renewToken(api: Api, tokenId: string, input: RenewTokenInp
     // Jivox agents that used the old token follow the new one (Renew = "replace this token"; the
     // user pastes the new one in Studio). Same transaction: never an agent left on a revoked token.
     const moved = await tx.jivoxAgent.updateMany({ where: { apiId: api.id, tokenId: old.id }, data: { tokenId: row.id } });
+    // …and so do test switches aimed at it (7.4): "break agent B" keeps breaking agent B.
+    await tx.apiTestSwitch.updateMany({ where: { apiId: api.id, tokenId: old.id }, data: { tokenId: row.id } });
     return { token: made.token, tokenInfo: toTokenInfo(row), replaced: toTokenInfo(revokedOld), agentsMoved: moved.count };
   });
 }

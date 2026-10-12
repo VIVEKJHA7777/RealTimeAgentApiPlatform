@@ -4,11 +4,12 @@
 //
 // How a call is recorded, without slowing /v1:
 //   1. recordCalls (first middleware of /v1) starts a "note" for /v1/<brand>/<api> calls; the
-//      JSON parser keeps the first 2 KB of the body in it; answerCall / sendFailure fill in the
+//      JSON parser keeps the first 4 KB of the body in it; answerCall / sendFailure fill in the
 //      rest (API, token name, ids, found, error).
 //   2. When the answer has gone out, the note becomes a RecentCall and joins the API's list in
-//      memory. Calls without a usable token are matched to the API by its address (one indexed
-//      lookup, cached 10 s).
+//      memory; the full entry goes to the call log as well (call-log.ts, task 7.2). Calls
+//      without a usable token are matched to the API by its address (one indexed lookup,
+//      cached 10 s).
 //   3. The list is saved at most once a second per API (one upsert that keeps the newest 5).
 // Not recorded: the app's own self-check (it would push Jivox's calls out), unknown paths.
 // Never stored: token headers; token-shaped text in the URL / body is scrubbed.
@@ -17,11 +18,15 @@ import type { NextFunction, Request, Response } from 'express';
 import { AppError } from '../../lib/app-error.js';
 import { logger, scrubTokens } from '../../lib/logger.js';
 import { prisma } from '../../lib/prisma.js';
+import type { RequestTemplate } from '../apis/design/design.schemas.js';
+import type { RequestSummary } from '../apis/design/request-rules.js';
+import { logCall } from './call-log.js';
 import { readToken, SELF_CHECK_HEADER } from './v1.service.js';
 
 export const RECENT_CALLS_KEPT = 5;
 const SAVE_EVERY_MS = 1_000;
 const MAX_TEXT = 2_048; // body / path shown, in characters
+const MAX_BODY_KEPT = 4_096; // the call log's share of the body (7.2)
 const MAX_IDS_SHOWN = 10;
 const MAX_ID_LENGTH = 100;
 const API_LOOKUP_TTL_MS = 10_000;
@@ -58,11 +63,13 @@ export type CallNote = {
   apiId?: string;
   tokenKind: TokenKind;
   tokenName?: string;
+  tokenId?: string; // the call log tells same-named tokens apart (7.3)
   header: RecentCall['header'];
   ids?: string[];
   found?: number;
-  body?: string;
+  body?: string; // the first 4 KB as sent, scrubbed (the call log keeps 4 KB, Recent calls 2 KB)
   bodyBytes: number;
+  template?: { request: RequestTemplate; summary: RequestSummary }; // known once the API was found
 };
 export const callNote = (res: Response) => res.locals.v1Call as CallNote | undefined;
 
@@ -99,13 +106,13 @@ export function keepBody(res: Response, buf: Buffer) {
   const note = callNote(res);
   if (!note) return;
   note.bodyBytes = buf.length;
-  note.body = shorten(buf.subarray(0, MAX_TEXT * 4 + 64).toString('utf8'));
+  note.body = shorten(buf.subarray(0, MAX_BODY_KEPT * 4 + 64).toString('utf8'), MAX_BODY_KEPT);
 }
 
 // Scrub BEFORE cutting: a token is 47 characters, so one that starts inside the kept part is
 // always whole in the extra 64 and gets scrubbed (no half token left at the cut).
-function shorten(text: string) {
-  return scrubTokens(text.slice(0, MAX_TEXT + 64)).slice(0, MAX_TEXT);
+function shorten(text: string, max = MAX_TEXT) {
+  return scrubTokens(text.slice(0, max + 64)).slice(0, max);
 }
 
 // ── 2. The answer went out: note → RecentCall → the API's list ──
@@ -129,11 +136,12 @@ async function finish(req: Request, res: Response, note: CallNote) {
       idCount: note.ids?.length ?? null,
       ids: (note.ids ?? []).slice(0, MAX_IDS_SHOWN).map((id) => shorten(id).slice(0, MAX_ID_LENGTH)),
       found: note.found ?? null,
-      body: note.body ?? null,
+      body: note.body?.slice(0, MAX_TEXT) ?? null,
       bodyBytes: note.bodyBytes,
       userAgent: req.get('user-agent')?.slice(0, 300) ?? null,
       ip: req.ip ?? null,
     });
+    logCall(req, res, note, apiId); // the full entry for the call log (7.2)
   } catch (err) {
     logger.warn({ err }, 'Could not record a /v1 call');
   }

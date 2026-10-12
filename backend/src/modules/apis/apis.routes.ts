@@ -6,6 +6,8 @@ import { requireOrganization } from '../../middleware/require-organization.js';
 import * as agentsController from './agents/agents.controller.js';
 import * as apisController from './apis.controller.js';
 import * as designController from './design/design.controller.js';
+import * as logsController from './logs/logs.controller.js';
+import * as switchesController from './switches/switches.controller.js';
 import * as testingController from './testing/testing.controller.js';
 import * as tokensController from './tokens/tokens.controller.js';
 
@@ -50,6 +52,15 @@ apisRouter.post('/:apiSlug/self-check', requireApi, testingController.selfCheck)
 // Task 4.8b: the last 5 calls to the live URL (and Clear).
 apisRouter.get('/:apiSlug/recent-calls', requireApi, testingController.recentCalls);
 apisRouter.delete('/:apiSlug/recent-calls', requireApi, testingController.clearCalls);
+// Phase 7 (task 7.3): the call log (every /v1 call, newest 500): list + filters, one entry + curl, Clear.
+apisRouter.get('/:apiSlug/logs', requireApi, logsController.list);
+apisRouter.get('/:apiSlug/logs/:logId', requireApi, logsController.getOne);
+apisRouter.delete('/:apiSlug/logs', requireApi, logsController.clear);
+// Task 7.4: test switches (/v1 answers wrongly on purpose, one mistake per switch; they end by themselves).
+apisRouter.get('/:apiSlug/switches', requireApi, switchesController.list);
+apisRouter.put('/:apiSlug/switches/:kind', requireApi, switchesController.set);
+apisRouter.delete('/:apiSlug/switches/:kind', requireApi, switchesController.turnOff);
+apisRouter.delete('/:apiSlug/switches', requireApi, switchesController.turnOff);
 
 // Phase 5 (task 5.2): the Jivox Real Time Agents this API serves (many per API), and the read-only
 // "Read from Jivox" (feed type, id column, bound fields, live tiers, contracts).

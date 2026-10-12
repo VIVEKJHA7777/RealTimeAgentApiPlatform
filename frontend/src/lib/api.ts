@@ -5,6 +5,9 @@ import type {
   Api,
   ApiErrorBody,
   ColumnTypes,
+  LogDetail,
+  LogFilters,
+  LogsPage,
   DesignInput,
   DesignPreview,
   DesignState,
@@ -314,6 +317,16 @@ export const testingApi = {
   recentCalls: (brandSlug: string, apiSlug: string) => apiFetch<RecentCalls>(`${apiPath(brandSlug, apiSlug)}/recent-calls`),
   clearRecentCalls: (brandSlug: string, apiSlug: string) =>
     apiFetch<RecentCalls>(`${apiPath(brandSlug, apiSlug)}/recent-calls`, { method: 'DELETE' }),
+}
+
+// ---------- The call log (Phase 7, task 7.3) ----------
+export const logsApi = {
+  list: (brandSlug: string, apiSlug: string, params: LogFilters & { before?: string; after?: string; limit?: number; kind?: 'call' | 'switch' }) => {
+    const query = new URLSearchParams(Object.entries(params).filter((e): e is [string, string | number] => e[1] !== undefined && e[1] !== '').map(([k, v]) => [k, String(v)]))
+    return apiFetch<LogsPage>(`${apiPath(brandSlug, apiSlug)}/logs${query.size > 0 ? `?${query}` : ''}`)
+  },
+  get: (brandSlug: string, apiSlug: string, logId: string) => apiFetch<LogDetail>(`${apiPath(brandSlug, apiSlug)}/logs/${encodeURIComponent(logId)}`),
+  clear: (brandSlug: string, apiSlug: string) => apiFetch<{ cleared: number; clearedAt: string }>(`${apiPath(brandSlug, apiSlug)}/logs`, { method: 'DELETE' }),
 }
 
 export const jivoxApi = {

@@ -170,7 +170,7 @@ export async function prepareAgentContract(api: Api, brandSlug: string, agentId:
   const ctx = await loadContext(api, brandSlug); // 409 NO_DESIGN / NO_DATA / DESIGN_INVALID
   const sampleIds = agent.sampleIds.length > 0 ? agent.sampleIds : await defaultIds(ctx);
   const sample = await sampleFor(ctx, sampleIds);
-  const answer = await answerInApp(ctx, sample);
+  const answer = await answerInApp(ctx, sample, { withSwitches: false }); // never a test switch in a contract (7.4)
   const info = agent.agentInfo as JivoxAgentInfo | null;
   const { document, notes } = buildContract({
     feedType: ctx.feedType,

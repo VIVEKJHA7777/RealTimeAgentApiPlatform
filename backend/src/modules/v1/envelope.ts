@@ -4,6 +4,7 @@
 //     "errors": [ { "error_id": "", "error_code": "UNAUTHORIZED", "error_message": "…" } ] }
 // Successes are built by design/build-response.ts (buildResponse).
 import type { Response } from 'express';
+import { dropsNoStore, sendsNotJson, slowMs, NOT_JSON_TEXT, type SwitchState } from './test-switches.js';
 
 export type V1ErrorCode =
   | 'UNAUTHORIZED' // no token / unknown / revoked / another API's / wrong header
@@ -15,7 +16,10 @@ export type V1ErrorCode =
   | 'PAYLOAD_TOO_LARGE'
   | 'NO_DATA'
   | 'SERVICE_BUSY' // overloaded / database briefly unreachable: try again
-  | 'INTERNAL_ERROR';
+  | 'INTERNAL_ERROR'
+  | 'FORBIDDEN' // only from the HTTP status test switch (7.4), like the next two
+  | 'RATE_LIMITED'
+  | 'BAD_GATEWAY';
 
 // Thrown inside the /v1 handler; turned into an envelope by v1ErrorHandler.
 export class V1Error extends Error {
@@ -40,6 +44,29 @@ export function setV1Headers(res: Response) {
   res.type('application/json');
 }
 
+// EVERY /v1 answer goes out here (7.2). Written directly instead of res.json(), which adds an
+// ETag (nothing should cache this answer) and would answer a matching If-None-Match with an EMPTY
+// 304. The exact text sent is kept for the call log. The sending test switches (7.4) act here:
+// slow (waits first), no_store (no Cache-Control), not_json (plain text).
+export function sendV1(res: Response, status: number, body: unknown) {
+  const switches = res.locals.v1Switches as SwitchState | undefined;
+  // In the fixed order (test-switches.ts), so the call log lists them that way.
+  const wait = slowMs(switches);
+  const noStore = dropsNoStore(switches);
+  const notJson = sendsNotJson(switches);
+  const text = notJson ? NOT_JSON_TEXT : JSON.stringify(body);
+  setV1Headers(res);
+  if (notJson) res.type('text/plain');
+  if (noStore) res.removeHeader('Cache-Control');
+  res.locals.v1Body = notJson ? undefined : body; // status + error codes for the call log
+  res.locals.v1Sent = text;
+  const send = () => {
+    if (!res.writableEnded && !res.destroyed) res.status(status).set('Content-Length', String(Buffer.byteLength(text))).end(text);
+  };
+  if (wait > 0) setTimeout(send, wait);
+  else send();
+}
+
 // The failure envelope's body (also shown by "Try it" for a call that would fail).
 export function failureBody(error: V1Error) {
   return {
@@ -51,8 +78,7 @@ export function failureBody(error: V1Error) {
 }
 
 export function sendFailure(res: Response, error: V1Error) {
-  setV1Headers(res);
   res.set(error.headers);
   res.locals.v1Failure = { code: error.code, message: error.message }; // for Recent calls (task 4.8b)
-  res.status(error.status).json(failureBody(error));
+  sendV1(res, error.status, failureBody(error));
 }

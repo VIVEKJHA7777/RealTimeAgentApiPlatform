@@ -20,6 +20,8 @@ import { AppError } from '../../../lib/app-error.js';
 import { env } from '../../../config/env.js';
 import { prisma } from '../../../lib/prisma.js';
 import { failureBody, V1Error } from '../../v1/envelope.js';
+import { checkCall } from '../../v1/request-check.js';
+import { applyToBody, dropsNoStore, httpStatusFailure, newSwitchState, NOT_JSON_TEXT, on, sendsNotJson, slowMs, strictFailure, type Envelope, type LiveSwitch } from '../../v1/test-switches.js';
 import { answerIds, extractIds, requestOf, SELF_CHECK_HEADER, type RuntimeApi } from '../../v1/v1.service.js';
 import { buildSampleRequest, queryString, type StoredRow } from '../design/build-response.js';
 import type { FIELD_TYPES, StoredDesign } from '../design/design.schemas.js';
@@ -108,22 +110,47 @@ export function describeRequest(sample: Sample) {
 
 const V1_HEADERS = { 'Cache-Control': 'no-store', 'Content-Type': 'application/json; charset=utf-8' };
 
-// The answer /v1 would give for this sample request, computed in this process.
-export async function answerInApp(ctx: Context, sample: Sample) {
+// Test switches for the app's own in-app answer (7.4, P7-3): only those on for the WHOLE API (no
+// token here) with "apply to our own checks" ticked.
+async function ownSwitches(apiId: string) {
+  const rows = await prisma.apiTestSwitch.findMany({ where: { apiId, tokenId: null, applyToOwnChecks: true, endsAt: { gt: new Date() } } });
+  return rows.map((r): LiveSwitch => ({ kind: r.kind as LiveSwitch['kind'], options: r.options as Record<string, unknown>, tokenId: null, own: true }));
+}
+
+// The answer /v1 would give for this sample request, computed in this process (with the same
+// test switches /v1 would apply to the app's own checks; `switches` = those that changed it).
+// `withSwitches: false`: the contract's sample answer (contract.ts), which must never be broken on purpose.
+export async function answerInApp(ctx: Context, sample: Sample, { withSwitches = true } = {}) {
   const started = performance.now();
+  const switches = newSwitchState();
+  if (withSwitches) switches.active = await ownSwitches(ctx.runtime.id);
   let status = 200;
   let body: unknown;
   try {
+    const statusSwitch = httpStatusFailure(switches);
+    if (statusSwitch) throw statusSwitch;
     // The ids are read back OUT of the request exactly like /v1 reads them.
     const query = sample.method === 'GET' ? Object.fromEntries(new URLSearchParams(sample.url.split('?')[1] ?? '')) : {};
+    if (on(switches, 'strict')) {
+      const strict = strictFailure(switches, checkCall(ctx.request, ctx.summary, sample.method, query, sample.body).check);
+      if (strict) throw strict;
+    }
     const ids = extractIds(ctx.summary, ctx.request.maxIdsPerCall, query, sample.body);
-    body = (await answerIds(ctx.runtime, ctx.ds.id, ctx.ds.idColumn, ids)).response;
+    body = applyToBody(switches, (await answerIds(ctx.runtime, ctx.ds.id, ctx.ds.idColumn, ids)).response as Envelope, ids, ctx.runtime.design);
   } catch (err) {
     if (!(err instanceof V1Error)) throw err;
     status = err.status;
     body = failureBody(err);
   }
-  return { status, headers: V1_HEADERS, body, durationMs: Math.round(performance.now() - started) };
+  const headers: Record<string, string> = { ...V1_HEADERS };
+  if (sendsNotJson(switches)) {
+    body = NOT_JSON_TEXT;
+    headers['Content-Type'] = 'text/plain; charset=utf-8';
+  }
+  if (dropsNoStore(switches)) delete headers['Cache-Control'];
+  const wait = slowMs(switches);
+  if (wait > 0) await new Promise((resolve) => setTimeout(resolve, wait));
+  return { status, headers, body, durationMs: Math.round(performance.now() - started), switches: switches.applied };
 }
 
 // ── Try it ──
@@ -139,7 +166,8 @@ export async function tryApi(api: Api, brandSlug: string, input: TestInput) {
     ids, // the ids asked for (the first rows when none were sent)
     request: describeRequest(sample),
     curl: buildCurl({ method: sample.method, url: sample.url, header: sample.header, body: sample.body }),
-    response: { status: response.status, headers: response.headers, body: response.body },
+    // switches: the test switches that changed this answer (7.4: only those ticked "apply to our own checks")
+    response: { status: response.status, headers: response.headers, body: response.body, switches: response.switches },
     durationMs: response.durationMs,
   };
 }

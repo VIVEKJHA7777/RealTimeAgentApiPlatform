@@ -302,6 +302,89 @@ export type RecentCall = {
   ip: string | null
 }
 export type RecentCalls = { calls: RecentCall[]; kept: number; clearedAt: string | null }
+
+// ── Phase 7: the call log (task 7.3 endpoints; Logs tab 7.5) ──
+export type SwitchKind =
+  | 'no_store' | 'status_failure' | 'duplicate_id' | 'drop_id' | 'extra_id' | 'item_without_id'
+  | 'wrong_type' | 'slow' | 'http_status' | 'empty_data' | 'not_json' | 'strict'
+export type SwitchEvent = {
+  action: 'on' | 'changed' | 'off' | 'ended'
+  switch: SwitchKind
+  options: Record<string, unknown>
+  scope: { tokenId: string; tokenName: string | null } | null // null = every caller
+  applyToOwnChecks: boolean
+  endsAt: string
+  by: string | null // email; null = it ended by itself
+}
+// One line of the list (no bodies / headers: those are in LogDetail)
+export type LogEntry = {
+  id: string // a number as text (order: bigger = newer)
+  kind: 'call' | 'switch'
+  at: string
+  method: string | null
+  path: string | null
+  status: number | null // null = the caller hung up (or a switch line)
+  envelopeStatus: string | null // success | failure | null (not JSON / no answer)
+  errorCodes: string[]
+  tokenKind: RecentCallTokenKind | null
+  tokenId: string | null
+  tokenName: string | null // the token's name at the time of the call
+  header: 'x_api_key' | 'bearer' | null
+  idCount: number | null
+  ids: string[] // the first 5 (all, up to 100, in LogDetail)
+  found: number | null
+  durationMs: number | null
+  switches: SwitchKind[] // the test switches that changed this answer
+  checkOk: boolean | null // the request check; null = not checked (failed before the API was known)
+  ip: string | null
+  userAgent: string | null
+  event: SwitchEvent | null // switch lines only
+}
+export type LogToken = { name: string; hint: string; revoked: boolean; agents: { id: string; name: string }[] }
+export type LogsPage = {
+  entries: LogEntry[] // newest first
+  next: string | null // pass as `before` for older ones
+  gap: boolean // `after` only: more new ones than `limit` (reload)
+  matching: number
+  total: number
+  kept: number
+  newestId: string | null
+  tokens: Record<string, LogToken> // current name + agents of each token on this page
+}
+export type CheckItem = {
+  part: 'method' | 'ids' | 'value' | 'context' | 'column'
+  name: string
+  ok: boolean
+  expected?: string
+  got?: string
+  missingFor?: string[]
+}
+export type RequestCheck = { ok: boolean; items: CheckItem[]; extra: string[]; cutShort?: boolean }
+export type LogDetail = {
+  entry: LogEntry & {
+    query: Record<string, string | string[]> | null
+    body: string | null
+    bodyBytes: number
+    bodyCut: boolean
+    requestHeaders: Record<string, string | string[]> | null
+    meta: Record<string, string> | null
+    requestCheck: RequestCheck | null
+    responseHeaders: Record<string, string> | null
+    responseBody: string | null
+    responseCut: boolean
+  }
+  tokens: Record<string, LogToken>
+  curl: string | null
+  curlNotes: string[]
+}
+export type LogFilters = {
+  status?: 'ok' | 'failed'
+  token?: string // a token id, or "none"
+  check?: 'passed' | 'failed'
+  switched?: 'yes' | 'no'
+  id?: string
+  from?: string // ISO
+}
 export type PublishReason = { code: 'NO_DESIGN' | 'DESIGN_INVALID' | 'NO_DATA' | 'NO_ACTIVE_TOKEN'; message: string }
 export type PublishCheck = { status: 'draft' | 'published'; publishedAt: string | null; canPublish: boolean; reasons: PublishReason[] }
 

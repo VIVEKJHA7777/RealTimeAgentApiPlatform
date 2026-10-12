@@ -6,6 +6,7 @@ import { OverviewTab } from '@/components/apis/api-page/OverviewTab'
 import { DataTab } from '@/components/apis/data/DataTab'
 import { DesignTab } from '@/components/apis/design/DesignTab'
 import { JivoxTab } from '@/components/apis/jivox/JivoxTab'
+import { LogsTab } from '@/components/apis/call-log/LogsTab'
 import { TestTab } from '@/components/apis/test/TestTab'
 import { ApiPage } from '@/pages/ApiPage'
 import { BrandPage } from '@/pages/BrandPage'
@@ -42,6 +43,7 @@ export default function App() {
             <Route path="design" element={<DesignTab />} />
             <Route path="test" element={<TestTab />} />
             <Route path="jivox" element={<JivoxTab />} />
+            <Route path="logs" element={<LogsTab />} />
           </Route>
           <Route path="*" element={<NotFoundPage />} />
         </Route>
