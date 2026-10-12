@@ -1,4 +1,4 @@
-import { Loader2, ToggleRight } from 'lucide-react'
+import { ChevronDown, ChevronRight, Loader2, ToggleRight } from 'lucide-react'
 import { useEffect, useId, useRef, useState } from 'react'
 import { useLocation } from 'react-router'
 import { toast } from 'sonner'
@@ -23,6 +23,7 @@ import {
   SWITCH_GROUPS,
   SWITCHES_CARD_ID,
 } from '@/lib/switches'
+import { useRememberedOpen } from '@/lib/use-remembered-open'
 import { useRequest } from '@/lib/use-request'
 import type { SwitchesHandle } from '@/lib/use-switches'
 import { useTokens } from '@/lib/use-tokens'
@@ -35,7 +36,9 @@ import { cn } from '@/lib/utils'
 export function SwitchesCard({ brandSlug, api, switches }: { brandSlug: string; api: Api; switches: SwitchesHandle }) {
   const [editing, setEditing] = useState<SwitchKind | null>(null)
   const [allOffBusy, setAllOffBusy] = useState(false)
-  const heading = useRef<HTMLHeadingElement>(null)
+  const heading = useRef<HTMLButtonElement>(null) // the open / close button inside the heading
+  // Closed until the person opens it; their choice is remembered in this browser (like the checklist).
+  const [open, setOpen] = useRememberedOpen('test.switches.open', false)
   const tokens = useTokens(brandSlug, api.slug)
   const agents = useRequest(`agents:${brandSlug}/${api.slug}`, () => agentsApi.list(brandSlug, api.slug))
   const choices = scopeChoices(
@@ -45,8 +48,10 @@ export function SwitchesCard({ brandSlug, api, switches }: { brandSlug: string; 
 
   // The banner's "Manage" lands here (…/test#test-switches).
   const { hash } = useLocation()
+  // "Manage" always opens the card (it's what the person came for).
   useEffect(() => {
     if (hash !== `#${SWITCHES_CARD_ID}` || !switches.state) return
+    setOpen(true)
     heading.current?.closest('section')?.scrollIntoView({ block: 'start' }) // the card keeps a margin under the top bar
     heading.current?.focus({ preventScroll: true })
   }, [hash, switches.state === null]) // eslint-disable-line react-hooks/exhaustive-deps
@@ -66,21 +71,48 @@ export function SwitchesCard({ brandSlug, api, switches }: { brandSlug: string; 
     }
   }
 
+  const bodyId = 'test-switches-list'
   const catalogue = new Map((switches.state?.catalogue ?? []).map((c) => [c.kind, c]))
   const onCount = switches.on.length
 
   return (
     <section id={SWITCHES_CARD_ID} aria-labelledby="switches-heading" className="@container scroll-mt-20 rounded-2xl border bg-background">
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2 border-b px-5 py-4">
+      <div className={cn('flex flex-wrap items-center gap-x-3 gap-y-2 px-5 py-4', open && 'border-b')}>
         <div className="min-w-60 flex-1">
-          <h2 id="switches-heading" ref={heading} tabIndex={-1} className="flex items-center gap-2 font-semibold outline-none">
-            <ToggleRight className="size-4 text-muted-foreground" aria-hidden="true" />
-            Test switches
-            {onCount > 0 && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">{onCount} on</span>}
+          {/* A disclosure: the button inside the heading opens / closes the list of switches. */}
+          <h2 id="switches-heading" className="font-semibold">
+            <button
+              ref={heading}
+              type="button"
+              onClick={() => setOpen(!open)}
+              aria-expanded={open}
+              aria-controls={bodyId}
+              className="flex items-center gap-2 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+              <ToggleRight className="size-4 text-muted-foreground" aria-hidden="true" />
+              Test switches
+              {onCount > 0 && <span className="rounded-full bg-destructive/10 px-2 py-0.5 text-xs font-medium text-destructive">{onCount} on</span>}
+            </button>
           </h2>
           <p className="text-sm text-muted-foreground">
             Make the live URL answer wrongly on purpose, one mistake per switch, to check that Jivox catches it. Each ends by itself. The contract is never affected.
           </p>
+          {/* Closed: what's on, so nobody has to open it just to check. */}
+          {!open && switches.state && (
+            <ul className="mt-2 grid gap-0.5 text-xs" aria-label="Switches on">
+              {onCount === 0 ? (
+                <li className="text-muted-foreground">None on: the live URL answers normally. Open to turn one on.</li>
+              ) : (
+                switches.on.map((sw) => (
+                  <li key={sw.kind} className="text-destructive">
+                    ● {switchName(sw.kind, sw.options)} · {scopeLabel(sw)}
+                    {sw.applyToOwnChecks && ' · our own checks too'} · ends {clockLabel(sw.endsAt, switches.now)} ({endsIn(sw.endsAt, switches.now)})
+                  </li>
+                ))
+              )}
+            </ul>
+          )}
         </div>
         {onCount > 0 && (
           <Button size="sm" variant="outline" onClick={() => void allOff()} disabled={allOffBusy}>
@@ -90,7 +122,7 @@ export function SwitchesCard({ brandSlug, api, switches }: { brandSlug: string; 
         )}
       </div>
 
-      {!switches.state ? (
+      {!open ? null : !switches.state ? (
         switches.error ? (
           <div role="alert" className="flex flex-col items-start gap-2 p-5 text-sm">
             <p>{switches.error.message}</p>
@@ -102,7 +134,7 @@ export function SwitchesCard({ brandSlug, api, switches }: { brandSlug: string; 
           <p className="p-5 text-sm text-muted-foreground">Loading the switches…</p>
         )
       ) : (
-        <div className="grid gap-1 p-2 @lg:p-3">
+        <div id={bodyId} className="grid gap-1 p-2 @lg:p-3">
           {SWITCH_GROUPS.map((group) => (
             <div key={group.title} role="group" aria-label={group.title}>
               <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground">{group.title}</p>
