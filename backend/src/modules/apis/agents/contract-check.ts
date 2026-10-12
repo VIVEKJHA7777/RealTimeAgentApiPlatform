@@ -207,7 +207,7 @@ export function baseUrlCheck(baseUrl: string): ContractCheck {
     detail: local
       ? `${baseUrl}: Jivox on qa3 can't reach this machine. Set PUBLIC_BASE_URL to a public https address (a tunnel, or the deployed server).`
       : `${baseUrl}: Jivox needs an https address.`,
-    fix: { place: 'settings', text: 'Set PUBLIC_BASE_URL (Phase 6.1: tunnel)' },
+    fix: { place: 'settings', text: 'Use the deployed server (e.g. Render: it sets its own address), or set PUBLIC_BASE_URL to a public https address' },
   };
 }
 

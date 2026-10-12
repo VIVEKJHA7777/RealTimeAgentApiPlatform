@@ -276,6 +276,29 @@ Design; republish refused until renamed; renamed → publish OK, `/v1` answers `
 `sub-category` → `sub_category` both sides). Answers lib **26** (+ the real answer). Regression: 3.2 69 · 3.4 51 ·
 3.5 41 · 3.7 26 · 3.8 33 · 4.9 52 · 5.3 30 · 5.4 29 · 5.7 42 · 6.2 32 · 6.4 40.
 
+### First real success on qa3 (2026-10-12, 20:40 IST, the user, live app)
+API `newsubtitle` (brand Amazon), **Agent 1** (bound `sub_category` → key `subCategory`, id key `Id1`, token "TestToken"
+pasted in Studio): checklist all ✓ incl. "Jivox can reach the base URL" → **Submit → verified v1** → **Activate v1 →
+activated** ("Version 1 is live") → versions: v1 Active (design v2) → table chip **v1 active**. Our reader understood
+both real answers (exact JSON: now visible as "Jivox's answer (raw)" in each history row → to be copied here).
+
+### UI improvements after the first real run (2026-10-12, user request: "close the checklist, open it when I want")
+| Part | What | Where |
+|---|---|---|
+| Order | the **Jivox** section first (the main job once set up), then Checklist, then Contract | `AgentPanel.tsx` |
+| Checklist | collapsible; closed by default when nothing fails (one line: "Ready for Jivox · 17 passed · 1 warning"); **closed still lists every ✗ / ⚠**; opens by itself when something fails until the person chooses; the choice is remembered in this browser (`localStorage`, guarded) | `AgentPanel.tsx` (`Checklist`), `lib/use-remembered-open.ts` |
+| Contract | collapsible (closed by default): "contract/1 · GET /newsubtitle · 2 fields · design v2" + Copy / Download always there; the out-of-date banner always shows ("Submit it to Jivox again" after a submit) | `AgentPanel.tsx` (`ContractBox`) |
+| Facts line | "contract v1 active" from OUR newer submit / activate (the line said "no contract in Jivox yet" right after the activation, from the earlier Read from Jivox); a later read wins again | `lib/agents.ts` (`jivoxContractText`) |
+| Raw answer | every result / history entry: "Jivox's answer (raw)" (open by itself for an unknown answer) | `JivoxSection.tsx` |
+| Fix text | base_url ✗: "Use the deployed server (e.g. Render…) or set PUBLIC_BASE_URL" (was "Phase 6.1: tunnel") | `contract-check.ts` |
+
+Browser (local account, fake Jivox, an activated agent; 1100 px dark, 362 px): order; facts "contract v1 active";
+checklist open with the ✗ → closed → only the ✗ row → reload → still closed; contract one line → open → JSON; history
+row → "Jivox's answer (raw)". **Found + fixed:** at 362 px the Jivox title + buttons squeezed the host to one character
+a line (title min width, buttons wrap) and the contract summary pushed the page to 415 px (the sections' grid column
+could not shrink: `grid-cols-1`; header buttons `max-w-full`). Tests: UI lib **13** (+4 for the facts line); 5.4 29;
+types + lint clean.
+
 ### Reported by the user (open)
 - Jivox's log: `[realtime] Agent 2 call missing Cache-Control: no-store` (07:20:42 UTC). Our `/v1` sends `no-store` on
   every answer (one helper) and the live server does (HTTP/1.1 + HTTP/2, through Cloudflare, `cf-cache-status:

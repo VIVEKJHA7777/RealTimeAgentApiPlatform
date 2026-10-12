@@ -1,14 +1,15 @@
-import { AlertTriangle, CheckCircle2, Check, Copy, Download, KeyRound, Loader2, MinusCircle, Pencil, RefreshCw, Trash2, XCircle } from 'lucide-react'
+import { AlertTriangle, CheckCircle2, Check, ChevronDown, ChevronRight, Copy, Download, KeyRound, Loader2, MinusCircle, Pencil, RefreshCw, Trash2, XCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router'
 import { toast } from 'sonner'
 import { JsonBlock } from '@/components/apis/test/result-bits'
 import { Button } from '@/components/ui/button'
-import { fixTarget, groupChecks, lastTakenText } from '@/lib/agents'
+import { fixTarget, groupChecks, jivoxContractText, lastTakenText } from '@/lib/agents'
 import { agentsApi, ApiError, tokensApi } from '@/lib/api'
 import type { Agent, AgentCheck, Api, CheckStatus, ContractCheck } from '@/lib/api-types'
 import { copyToClipboard } from '@/lib/clipboard'
 import { formatRelativeTime } from '@/lib/format'
+import { useRememberedOpen } from '@/lib/use-remembered-open'
 import { cn } from '@/lib/utils'
 import { FieldChip } from './AgentDialog'
 import { JivoxSection } from './JivoxSection'
@@ -71,7 +72,7 @@ export function AgentPanel({
               )}{' '}
               ·{' '}
               {j.serviceTokenRegistered ? 'token registered in Studio' : j.serviceTokenRegistered === false ? <span className="text-destructive">no token in Studio</span> : 'token unknown'} ·{' '}
-              {j.contracts.activeVersion ? `contract v${j.contracts.activeVersion} active` : j.contracts.versions.length ? `${j.contracts.versions.length} verified, none active` : 'no contract in Jivox yet'} ·{' '}
+              {jivoxContractText(agent)} ·{' '}
               <span title={new Date(j.readAt).toLocaleString()}>read {formatRelativeTime(j.readAt)}</span>
             </>
           ) : canRead ? (
@@ -104,57 +105,83 @@ export function AgentPanel({
 
       <StudioToken brandSlug={brandSlug} apiSlug={api.slug} agent={agent} onEdit={onEdit} />
 
-      <div className="grid gap-4 @3xl:grid-cols-2">
-        <section aria-label={`Checklist of ${agent.name}`} className="grid content-start gap-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="flex items-center gap-2 font-medium">
-              Checklist
-              {result && (
-                <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', result.ready ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-destructive/10 text-destructive')}>
-                  {result.ready ? 'Ready for Jivox' : `${result.checks.filter((c) => c.status === 'fail').length} to fix`}
-                </span>
-              )}
-            </h3>
-            <Button size="sm" variant="outline" onClick={onRunCheck} disabled={check?.status === 'loading'}>
-              {check?.status === 'loading' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
-              {result ? 'Run again' : 'Run checks'}
-            </Button>
-          </div>
-          {check?.status === 'error' ? (
-            <div role="alert" className="flex flex-col items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm">
-              <p>{check.error.message}</p>
-              {(check.error.code === 'NO_DESIGN' || check.error.code === 'DESIGN_INVALID') && (
-                <Link to={`${base}/design`} className="font-medium text-primary hover:underline">
-                  Open the Design tab
-                </Link>
-              )}
-            </div>
-          ) : !result ? (
-            <p className="text-sm text-muted-foreground" aria-busy="true">
-              Checking…
-            </p>
-          ) : (
-            <div className={cn('grid gap-3 transition-opacity', check?.status === 'loading' && 'opacity-60')} aria-live="polite">
-              {groupChecks(result.checks).map((g) => (
-                <div key={g.id}>
-                  <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
-                  <ul className="grid gap-1.5" aria-label={g.label}>
-                    {g.checks.map((c) => (
-                      <CheckRow key={c.id} check={c} base={base} onEdit={onEdit} />
-                    ))}
-                  </ul>
-                </div>
-              ))}
-            </div>
-          )}
-        </section>
-
-        <ContractBox brandSlug={brandSlug} api={api} agent={agent} result={result} onTaken={onTaken} />
-      </div>
-
-      {/* Phase 6: submit / versions / activate / history */}
+      {/* Phase 6: submit / versions / activate / history: the main job once an agent is set up, so first */}
       <JivoxSection brandSlug={brandSlug} api={api} agent={agent} check={result} onChanged={onTaken} onEdit={onEdit} />
+
+      <Checklist agent={agent} check={check} result={result} base={base} onRunCheck={onRunCheck} onEdit={onEdit} />
+
+      <ContractBox brandSlug={brandSlug} api={api} agent={agent} result={result} onTaken={onTaken} />
     </div>
+  )
+}
+
+// The checklist (6.6 UI): closed when everything passes (one line), open when something needs a look;
+// the person's own open / closed choice is remembered in this browser. Closed, it still lists every
+// ✗ and ⚠, so a problem is never hidden.
+function Checklist({ agent, check, result, base, onRunCheck, onEdit }: { agent: Agent; check: CheckState | undefined; result: AgentCheck | undefined; base: string; onRunCheck: () => void; onEdit: () => void }) {
+  const fails = result?.checks.filter((c) => c.status === 'fail') ?? []
+  const warns = result?.checks.filter((c) => c.status === 'warn') ?? []
+  const passed = result?.checks.filter((c) => c.status === 'pass').length ?? 0
+  const [open, setOpen] = useRememberedOpen('jivox.panel.checklist', !result || fails.length > 0)
+  const bodyId = `checklist-${agent.id}`
+  return (
+    <section aria-label={`Checklist of ${agent.name}`} className="grid grid-cols-1 content-start gap-3 rounded-xl border bg-background p-4">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={bodyId} className="flex min-w-[12rem] max-w-full flex-1 flex-wrap items-center gap-2 rounded-md text-left font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          Checklist
+          {result && (
+            <span className={cn('rounded-full px-2 py-0.5 text-xs font-medium', result.ready ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-destructive/10 text-destructive')}>
+              {result.ready ? 'Ready for Jivox' : `${fails.length} to fix`}
+            </span>
+          )}
+          {result && (
+            <span className="text-xs font-normal text-muted-foreground">
+              {passed} passed{warns.length ? ` · ${warns.length} warning${warns.length === 1 ? '' : 's'}` : ''}
+            </span>
+          )}
+        </button>
+        <Button size="sm" variant="outline" onClick={onRunCheck} disabled={check?.status === 'loading'}>
+          {check?.status === 'loading' ? <Loader2 className="animate-spin" /> : <RefreshCw />}
+          {result ? 'Run again' : 'Run checks'}
+        </Button>
+      </div>
+      <div id={bodyId}>
+        {check?.status === 'error' ? (
+          <div role="alert" className="flex flex-col items-start gap-2 rounded-lg bg-muted/50 p-3 text-sm">
+            <p>{check.error.message}</p>
+            {(check.error.code === 'NO_DESIGN' || check.error.code === 'DESIGN_INVALID') && (
+              <Link to={`${base}/design`} className="font-medium text-primary hover:underline">
+                Open the Design tab
+              </Link>
+            )}
+          </div>
+        ) : !result ? (
+          <p className="text-sm text-muted-foreground" aria-busy="true">
+            Checking…
+          </p>
+        ) : open ? (
+          <div className={cn('grid gap-3 transition-opacity', check?.status === 'loading' && 'opacity-60')} aria-live="polite">
+            {groupChecks(result.checks).map((g) => (
+              <div key={g.id}>
+                <p className="mb-1 text-xs font-medium text-muted-foreground">{g.label}</p>
+                <ul className="grid gap-1.5" aria-label={g.label}>
+                  {g.checks.map((c) => (
+                    <CheckRow key={c.id} check={c} base={base} onEdit={onEdit} />
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : fails.length + warns.length > 0 ? (
+          <ul className={cn('grid gap-1.5', check?.status === 'loading' && 'opacity-60')} aria-label="Checks that need a look">
+            {[...fails, ...warns].map((c) => (
+              <CheckRow key={c.id} check={c} base={base} onEdit={onEdit} />
+            ))}
+          </ul>
+        ) : null}
+      </div>
+    </section>
   )
 }
 
@@ -296,10 +323,21 @@ function ContractBox({ brandSlug, api, agent, result, onTaken }: { brandSlug: st
     }
   }
   const state = agent.contract
+  const [open, setOpen] = useRememberedOpen('jivox.panel.contract', false)
+  const doc = result?.document
+  const bodyId = `contract-${agent.id}`
   return (
-    <section aria-label={`Contract of ${agent.name}`} className="grid min-w-0 content-start gap-3">
+    <section aria-label={`Contract of ${agent.name}`} className="grid grid-cols-1 min-w-0 content-start gap-3 rounded-xl border bg-background p-4">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="font-medium">Contract</h3>
+        <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} aria-controls={bodyId} className="flex min-w-[12rem] max-w-full flex-1 items-center gap-2 overflow-hidden rounded-md text-left font-medium outline-none focus-visible:ring-3 focus-visible:ring-ring/50">
+          {open ? <ChevronDown className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" /> : <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />}
+          Contract
+          {doc && (
+            <span className="min-w-0 truncate text-xs font-normal text-muted-foreground">
+              {doc.contract_format} · {doc.request.method} {doc.request.path} · {doc.fields.length} fields · design v{result.designVersion}
+            </span>
+          )}
+        </button>
         <div className="flex gap-2">
           <Button size="sm" variant="outline" onClick={() => void copy()} disabled={!result} aria-label="Copy contract JSON">
             {copied ? <Check className="text-emerald-600 dark:text-emerald-400" /> : <Copy />}
@@ -325,25 +363,25 @@ function ContractBox({ brandSlug, api, agent, result, onTaken }: { brandSlug: st
               <li key={c}>{c}</li>
             ))}
           </ul>
-          <p className="text-muted-foreground">Copy or download it again and give Jivox the new one.</p>
+          <p className="text-muted-foreground">{state.last.how === 'submit' ? 'Submit it to Jivox again.' : 'Copy or download it again and give Jivox the new one.'}</p>
         </div>
       )}
-      {result ? (
-        <>
+      {!result ? (
+        <div className="h-10 animate-pulse rounded-lg bg-muted/60" />
+      ) : open ? (
+        <div id={bodyId} className="grid gap-2">
           <JsonBlock value={text} label={`Contract JSON of ${agent.name}`} className="max-h-[28rem]" />
           <p className="text-xs text-muted-foreground">
             Generated from design v{result.designVersion} and {agent.fields.length} agent field{agent.fields.length === 1 ? '' : 's'}; it changes when they do. Sample ids:{' '}
             <span className="font-mono">{result.sample.ids.join(', ')}</span>.{' '}
             {!state.last
-              ? 'Not copied or downloaded yet: once you do, this tab tells you when it changes.'
+              ? 'Not copied, downloaded or submitted yet: once you do, this tab tells you when it changes.'
               : state.outOfDate === false
                 ? `Same as the one ${lastTakenText(state.last, formatRelativeTime).replace(/^\w/, (c) => c.toLowerCase())}.`
                 : ''}
           </p>
-        </>
-      ) : (
-        <div className="h-40 animate-pulse rounded-lg bg-muted/60" />
-      )}
+        </div>
+      ) : null}
     </section>
   )
 }

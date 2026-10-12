@@ -216,3 +216,17 @@ export function actionTitle(a: JivoxAction): string {
   if (a.kind === 'submit') return `Submit → ${lowerFirst(o.text)}${a.outcome === 'verified' && a.version ? ` v${a.version}` : ''}`
   return `Activate v${a.version} → ${lowerFirst(o.text)}${a.outcome === 'activated' && a.retired ? ` (v${a.retired} retired)` : ''}`
 }
+
+// The panel's "Jivox: … · contract v1 active" fact. "Read from Jivox" saved what Jivox said at that
+// moment; a submit / activate made here AFTER that read is newer, so it wins (6.6: the line said
+// "no contract in Jivox yet" right after an activation).
+export function jivoxContractText(agent: Agent): string {
+  const j = agent.jivox
+  const ours = agent.jivoxActions
+  const readAt = j ? Date.parse(j.readAt) : 0
+  if (ours?.activeVersion != null && ours.activatedAt && Date.parse(ours.activatedAt) > readAt) return `contract v${ours.activeVersion} active`
+  const last = ours?.lastSubmit
+  if (last?.outcome === 'verified' && last.version != null && Date.parse(last.at) > readAt && !j?.contracts.activeVersion) return `v${last.version} verified, none active`
+  if (!j) return 'not read from Jivox'
+  return j.contracts.activeVersion ? `contract v${j.contracts.activeVersion} active` : j.contracts.versions.length ? `${j.contracts.versions.length} verified, none active` : 'no contract in Jivox yet'
+}

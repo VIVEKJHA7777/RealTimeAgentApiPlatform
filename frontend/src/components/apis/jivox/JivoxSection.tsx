@@ -181,9 +181,9 @@ export function JivoxSection({
   const askActivate = (version: number) => ask({ kind: 'activate', version, active: activeVersion })
 
   return (
-    <section aria-label={`Jivox for ${agent.name}`} className="grid gap-3 rounded-xl border bg-background p-4" data-testid="jivox-section">
+    <section aria-label={`Jivox for ${agent.name}`} className="grid grid-cols-1 gap-3 rounded-xl border bg-background p-4" data-testid="jivox-section">
       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h3 className="min-w-0 flex-1 font-medium">
+        <h3 className="min-w-[12rem] flex-1 font-medium">
           Jivox
           {host && <span className="block font-mono text-xs font-normal break-all text-muted-foreground">{host}</span>}
         </h3>
@@ -394,9 +394,10 @@ function ActionCard({
           <JsonBlock value={action.evidence} label="Jivox's evidence" className="mt-2 max-h-72 bg-background" />
         </details>
       )}
-      {action.outcome === 'unknown' && action.answer !== undefined && (
-        <details open className="text-foreground">
-          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Jivox's whole answer</summary>
+      {action.answer !== undefined && action.answer !== null && (
+        // Jivox's answer exactly as it came (secrets removed): open when we couldn't read it.
+        <details open={action.outcome === 'unknown'} className="text-foreground">
+          <summary className="cursor-pointer text-xs font-medium text-muted-foreground">Jivox's answer (raw)</summary>
           <JsonBlock value={action.answer} label="Jivox's answer" className="mt-2 max-h-72 bg-background" />
         </details>
       )}
