@@ -230,3 +230,29 @@ export function jivoxContractText(agent: Agent): string {
   if (!j) return 'not read from Jivox'
   return j.contracts.activeVersion ? `contract v${j.contracts.activeVersion} active` : j.contracts.versions.length ? `${j.contracts.versions.length} verified, none active` : 'no contract in Jivox yet'
 }
+
+// The Overview's last step, "Contract and Jivox" (fixed 2026-10-13: it was always "to do"): from what we
+// saw of each agent's submits / activations. `null` agents = still loading.
+export type JivoxStep = { state: 'done' | 'running' | 'failed' | 'todo'; text: string }
+const FAILED_OUTCOMES = new Set<JivoxOutcome>(['failed', 'invalid', 'gate_failed', 'refused', 'unreachable', 'auth_failed', 'bad_answer', 'timeout', 'interrupted', 'unknown'])
+export function jivoxStep(agents: Agent[] | null): JivoxStep {
+  const todo = 'Generate the contract/1 document and activate it on Jivox.'
+  if (agents === null) return { state: 'todo', text: todo }
+  if (agents.length === 0) return { state: 'todo', text: 'Add the Jivox agent on the Jivox tab, then submit and activate its contract.' }
+  const running = agents.find((a) => a.jivoxActions?.running)
+  if (running) {
+    const r = running.jivoxActions!.running!
+    return { state: 'running', text: `${running.name}: ${r.kind === 'submit' ? 'submitting the contract to' : `activating v${r.version ?? '?'} on`} Jivox…` }
+  }
+  const active = agents.filter((a) => a.jivoxActions?.activeVersion != null)
+  if (active.length > 0) {
+    const others = agents.filter((a) => a.jivoxActions?.activeVersion == null).map((a) => a.name)
+    const list = active.map((a) => `${a.name} (v${a.jivoxActions!.activeVersion})`).join(', ')
+    return { state: 'done', text: `Active on Jivox: ${list}${others.length > 0 ? ` · not yet: ${others.join(', ')}` : ''}.` }
+  }
+  const verified = agents.find((a) => a.jivoxActions?.lastSubmit?.outcome === 'verified')
+  if (verified) return { state: 'todo', text: `${verified.name}: v${verified.jivoxActions!.lastSubmit!.version ?? '?'} verified: activate it on the Jivox tab.` }
+  const failed = agents.find((a) => a.jivoxActions?.lastSubmit?.outcome && FAILED_OUTCOMES.has(a.jivoxActions.lastSubmit.outcome))
+  if (failed) return { state: 'failed', text: `${failed.name}: the last submit failed: see its History on the Jivox tab.` }
+  return { state: 'todo', text: `${agents.length === 1 ? agents[0].name : `${agents.length} agents`} added: submit the contract and activate it on the Jivox tab.` }
+}

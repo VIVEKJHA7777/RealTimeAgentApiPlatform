@@ -5,6 +5,9 @@ import { CopyButton } from '@/components/CopyButton'
 import type { DataSource } from '@/lib/api-types'
 import { formatNumber } from '@/lib/format'
 import { isImportActive } from '@/lib/imports'
+import { jivoxStep } from '@/lib/agents'
+import { agentsApi } from '@/lib/api'
+import { useRequest } from '@/lib/use-request'
 import { cn } from '@/lib/utils'
 import { useApiPage } from './context'
 
@@ -70,7 +73,11 @@ export function OverviewTab() {
 
 // What's done and what comes next for this API (the later phases).
 function NextSteps({ dataSource, designed, published }: { dataSource: DataSource; designed: boolean; published: boolean }) {
+  const { organization, api } = useApiPage()
   const importing = isImportActive(dataSource.latestImport)
+  // The last step comes from the agents' Jivox submits / activations (it was always "to do" before).
+  const agents = useRequest(`agents:${organization.slug}/${api.slug}`, () => agentsApi.list(organization.slug, api.slug), { refetchOnFocus: true })
+  const jivox = jivoxStep(agents.data?.agents ?? null) // loading or failed: the neutral "to do" text
   const steps = [
     {
       title: dataSource.hasData || importing ? 'Data uploaded' : 'Data not imported',
@@ -87,7 +94,7 @@ function NextSteps({ dataSource, designed, published }: { dataSource: DataSource
     published
       ? { title: 'Published', text: 'Jivox can call it with one of its tokens. Test it any time in the Test tab.', state: 'done' }
       : { title: 'Tokens and testing', text: 'Create a token, try the API and run the self-check (Test tab), then publish.', state: 'todo' },
-    { title: 'Contract and Jivox', text: 'Generate the contract/1 document and activate it on Jivox.', state: 'todo' },
+    { title: 'Contract and Jivox', ...jivox },
   ] as const
 
   return (
