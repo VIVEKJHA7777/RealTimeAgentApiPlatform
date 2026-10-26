@@ -24,6 +24,7 @@ import { checkCall } from '../../v1/request-check.js';
 import { applyToBody, dropsNoStore, httpStatusFailure, newSwitchState, NOT_JSON_TEXT, on, sendsNotJson, slowMs, strictFailure, type Envelope, type LiveSwitch } from '../../v1/test-switches.js';
 import { answerIds, extractIds, requestOf, SELF_CHECK_HEADER, type RuntimeApi } from '../../v1/v1.service.js';
 import { buildSampleRequest, queryString, type StoredRow } from '../design/build-response.js';
+import { parseDate } from '../design/convert.js';
 import type { FIELD_TYPES, StoredDesign } from '../design/design.schemas.js';
 
 type FieldType = (typeof FIELD_TYPES)[number];
@@ -185,6 +186,10 @@ export function matchesType(type: FieldType, value: unknown) {
       return typeof value === 'boolean';
     case 'image':
       return typeof value === 'string' && /^https?:\/\/\S+$/i.test(value);
+    case 'array':
+      return Array.isArray(value) && value.every((part) => typeof part === 'string');
+    case 'date':
+      return typeof value === 'string' && parseDate(value) === value;
     default:
       return typeof value === 'string';
   }

@@ -120,7 +120,7 @@ export type Api = {
 
 // ---------- Design (Phase 3) ----------
 
-export type FieldType = 'string' | 'int' | 'float' | 'boolean' | 'image'
+export type FieldType = 'string' | 'int' | 'float' | 'boolean' | 'image' | 'array' | 'date'
 export type Tier = 'mandatory' | 'expected' | 'optional'
 
 // GET /api/jivox/feed-schemas/:feedType → { feedSchema }: the Jivox columns of a feed type.
@@ -197,7 +197,7 @@ export type ColumnInfo = {
   isId: boolean
   filled: number
   empty: number
-  fits: { int: number; float: number; boolean: number; image: number }
+  fits: { int: number; float: number; boolean: number; image: number; array: number; date: number }
   candidates: FieldType[] // best first; [] = no values to judge
   suggestedType: FieldType | null
   examples: string[]

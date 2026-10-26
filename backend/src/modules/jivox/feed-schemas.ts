@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { parse } from 'csv-parse/sync';
 import type { FeedType } from '../../generated/prisma/client.js';
 
-export type FieldType = 'string' | 'int' | 'float' | 'boolean' | 'image';
+export type FieldType = 'string' | 'int' | 'float' | 'boolean' | 'image' | 'array' | 'date';
 export type Tier = 'mandatory' | 'expected' | 'optional';
 
 export type JivoxField = {

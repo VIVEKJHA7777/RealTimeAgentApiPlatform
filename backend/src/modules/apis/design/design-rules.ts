@@ -119,6 +119,8 @@ const TYPE_WORDS = {
   float: 'a number',
   boolean: 'true/false (also yes/no, 1/0)',
   image: 'an http(s) image URL',
+  array: 'a list (separate values with | or ,)',
+  date: 'a date (YYYY-MM-DD)',
 } as const;
 
 // A response key made from a column name: "Product Title" → "Product_Title", "price€" → "price".

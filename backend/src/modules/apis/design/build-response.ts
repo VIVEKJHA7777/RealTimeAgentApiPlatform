@@ -10,7 +10,7 @@ import type { RequestTemplate, StoredDesign } from './design.schemas.js';
 import type { RequestSummary } from './request-rules.js';
 
 export type StoredRow = { externalId: string; data: Record<string, string | null> };
-export type Item = Record<string, string | number | boolean>;
+export type Item = Record<string, string | number | boolean | string[]>;
 // Something in a row that didn't go out as written (shown in the preview).
 export type ValueNote = {
   id: string;

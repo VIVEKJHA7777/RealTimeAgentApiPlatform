@@ -12,13 +12,15 @@ import type {
   RequestTemplate,
 } from './api-types'
 
-export const FIELD_TYPES: FieldType[] = ['string', 'int', 'float', 'boolean', 'image']
+export const FIELD_TYPES: FieldType[] = ['string', 'int', 'float', 'boolean', 'image', 'array', 'date']
 export const TYPE_LABELS: Record<FieldType, string> = {
   string: 'Text',
   int: 'Whole number',
   float: 'Number',
   boolean: 'True / false',
   image: 'Image URL',
+  array: 'List (| or ,)',
+  date: 'Date',
 }
 // Popover triggers and selects that sit next to <Input>s look like them.
 export const fieldControlClass =
@@ -103,7 +105,9 @@ export function suggestType(info: ColumnInfo | undefined, jivoxHint: FieldType):
 export function fitPercent(info: ColumnInfo | undefined, type: FieldType): number | null {
   if (!info || info.filled === 0) return null
   if (type === 'string') return 100
-  return Math.round((info.fits[type] / info.filled) * 1000) / 10
+  const count = info.fits[type]
+  if (typeof count !== 'number') return null
+  return Math.round((count / info.filled) * 1000) / 10
 }
 
 // ───────────────────────────── problems ─────────────────────────────

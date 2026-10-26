@@ -250,7 +250,11 @@ export function TypePicker({
           <ChevronsUpDown className="size-3.5 shrink-0 text-muted-foreground" aria-hidden="true" />
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-72 gap-1 p-1">
+      <PopoverContent
+        align="start"
+        collisionPadding={12}
+        className="max-h-(--radix-popover-content-available-height) w-72 min-h-0 gap-1 overflow-y-auto overscroll-contain p-1"
+      >
         <div role="radiogroup" aria-label={label}>
           {FIELD_TYPES.map((option) => {
             const percent = fitPercent(info, option)

@@ -9,7 +9,7 @@ export const RESPONSE_KEY = /^[A-Za-z0-9_]{1,64}$/;
 export const RESPONSE_KEY_MESSAGE = "Use 1–64 letters, numbers or _ (Jivox can't read a key with - or spaces)";
 const responseKey = z.string().trim().regex(RESPONSE_KEY, RESPONSE_KEY_MESSAGE);
 
-export const FIELD_TYPES = ['string', 'int', 'float', 'boolean', 'image'] as const;
+export const FIELD_TYPES = ['string', 'int', 'float', 'boolean', 'image', 'array', 'date'] as const;
 
 const fieldSchema = z.object({
   // Jivox schema column this value fills (contract `fields[].column_name`), e.g. "current_price".
@@ -18,7 +18,7 @@ const fieldSchema = z.object({
   sourceColumn: z.string().min(1, 'Choose a column of your data').max(200),
   responseKey,
   // How our API converts and sends the value.
-  type: z.enum(FIELD_TYPES, 'Type must be one of: string, int, float, boolean, image'),
+  type: z.enum(FIELD_TYPES, 'Type must be one of: string, int, float, boolean, image, array, date'),
   // false = "not in contract": the contract leaves `type` out and Jivox uses its schema's type. R5
   typeInContract: z.boolean().default(true),
   // Sent when a row has no (usable) value. "" = no default: then onEmpty decides (P3-5).
@@ -89,7 +89,7 @@ export const checkValuesSchema = z.object({
     .array(
       z.object({
         sourceColumn: z.string().min(1, 'Choose a column of your data').max(200),
-        type: z.enum(FIELD_TYPES, 'Type must be one of: string, int, float, boolean, image'),
+        type: z.enum(FIELD_TYPES, 'Type must be one of: string, int, float, boolean, image, array, date'),
       }),
     )
     .min(1, 'Send at least one field')

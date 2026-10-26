@@ -76,6 +76,26 @@ function valueOf(column: string, snap: Snapshot) {
   return column === snap.idColumn ? Prisma.sql`external_id` : Prisma.sql`(data ->> ${column})`;
 }
 
+// How many list items a cell has. `|` wins when the cell contains one; otherwise `,`.
+// Same split as listItems() in convert.ts (trim each piece, drop empties).
+function listItemCount(v: Prisma.Sql) {
+  return Prisma.sql`(SELECT count(*)::int FROM unnest(string_to_array((${v}), CASE WHEN strpos((${v}), '|') > 0 THEN '|' ELSE ',' END)) AS part WHERE btrim(part) <> '')`;
+}
+
+// A real YYYY-MM-DD (time on the end allowed, then ignored). Same calendar as parseDate().
+function dateFitsSql(v: Prisma.Sql) {
+  const y = Prisma.sql`substring((${v}) from 1 for 4)::int`;
+  const m = Prisma.sql`substring((${v}) from 6 for 2)`;
+  const d = Prisma.sql`substring((${v}) from 9 for 2)::int`;
+  // CASE runs the day check only after the shape matches, so a text cell never hits ::int.
+  return Prisma.sql`CASE WHEN (${v}) ~ ${PATTERNS.date} THEN (
+    ${d} <= CASE ${m}
+      WHEN '02' THEN CASE WHEN (${y} % 4 = 0 AND ${y} % 100 <> 0) OR (${y} % 400 = 0) THEN 29 ELSE 28 END
+      WHEN '04' THEN 30 WHEN '06' THEN 30 WHEN '09' THEN 30 WHEN '11' THEN 30
+      ELSE 31 END
+  ) ELSE false END`;
+}
+
 // "This value can be sent as `type`", in SQL. Same rules as convertValue() in convert.ts.
 function fitsSql(type: Exclude<FieldType, 'string'>, v: Prisma.Sql) {
   switch (type) {
@@ -87,6 +107,10 @@ function fitsSql(type: Exclude<FieldType, 'string'>, v: Prisma.Sql) {
       return Prisma.sql`${v} ~* ${PATTERNS.image}`; // ~* = case-insensitive (HTTPS://)
     case 'boolean':
       return Prisma.sql`lower(${v}) IN (${Prisma.join(BOOLEAN_WORDS)})`;
+    case 'array':
+      return Prisma.sql`${listItemCount(v)} >= 1`;
+    case 'date':
+      return dateFitsSql(v);
   }
 }
 
@@ -102,10 +126,13 @@ type ColumnStats = {
   boolean: number;
   boolWords: number;
   image: number;
+  array: number; // values that split into 2+ items (| or ,). One item still converts.
+  date: number;
 };
 
 // Types that fit (≥ 95% of the non-empty values), best first. Empty column → [] (the Design
-// tab then uses the Jivox field's type hint). Always ends with "string" (everything fits).
+// tab then uses the Jivox field's type hint). "string" is always included (everything fits).
+// array / date are added after it, so a text or number column keeps the same first suggestion.
 export function candidateTypes(s: ColumnStats): FieldType[] {
   if (s.filled === 0) return [];
   const fits = (count: number) => count >= s.filled * FIT_SHARE;
@@ -119,6 +146,8 @@ export function candidateTypes(s: ColumnStats): FieldType[] {
   if (fits(s.image)) types.push('image');
   if (fits(s.boolean) && !boolFirst) types.push('boolean');
   types.push('string');
+  if (fits(s.date)) types.push('date');
+  if (fits(s.array)) types.push('array');
   return types;
 }
 
@@ -139,6 +168,8 @@ export function detectColumnTypes(api: Api) {
       boolean: 0,
       boolWords: 0,
       image: 0,
+      array: 0,
+      date: 0,
     };
     let sampled = 0;
     let stats: ColumnStats[] = snap.columns.map(() => ({ ...empty }));
@@ -157,7 +188,9 @@ export function detectColumnTypes(api: Api) {
           count(*) FILTER (WHERE ${fitsSql('float', v)})::int AS ${c('float')},
           count(*) FILTER (WHERE ${fitsSql('boolean', v)})::int AS ${c('boolean')},
           count(*) FILTER (WHERE lower(${v}) IN (${Prisma.join(BOOLEAN_WORDS.filter((w) => !/^[01]$/.test(w)))}))::int AS ${c('words')},
-          count(*) FILTER (WHERE ${fitsSql('image', v)})::int AS ${c('image')}`;
+          count(*) FILTER (WHERE ${fitsSql('image', v)})::int AS ${c('image')},
+          count(*) FILTER (WHERE ${listItemCount(v)} >= 2)::int AS ${c('array')},
+          count(*) FILTER (WHERE ${fitsSql('date', v)})::int AS ${c('date')}`;
       });
       const [row] = await tx.$queryRaw<Record<string, number>[]>`
         SELECT count(*)::int AS sampled, ${Prisma.join(counts)}
@@ -171,6 +204,8 @@ export function detectColumnTypes(api: Api) {
         boolean: row[`c${i}_boolean`],
         boolWords: row[`c${i}_words`],
         image: row[`c${i}_image`],
+        array: row[`c${i}_array`],
+        date: row[`c${i}_date`],
       }));
 
       // Example values: the first distinct ones in file order (from the first 50 rows).
@@ -205,6 +240,8 @@ export function detectColumnTypes(api: Api) {
             float: s.float,
             boolean: s.boolean,
             image: s.image,
+            array: s.array,
+            date: s.date,
           },
           candidates, // best first; [] = no values to judge
           suggestedType: candidates[0] ?? null,
